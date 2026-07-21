@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-navigator"
+version = "0.1.0"
+description = "A compact, file-based experience navigation layer for agents."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Agent Navigator Contributors" }
+]
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+
+[project.scripts]
+agent-navi = "agent_navigator.cli:main"
+agent-navigator = "agent_navigator.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agent_navigator*"]

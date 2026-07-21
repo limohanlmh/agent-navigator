@@ -1,0 +1,46 @@
+# Python bytecode, environments, and tool caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build and distribution artifacts
+build/
+dist/
+*.whl
+*.tar.gz
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+.history/
+*.swp
+~$*.docx
+
+# Local secrets and runtime output
+.env
+.env.*
+!.env.example
+*.log
+
+# Internal research, benchmarks, and private source material
+benchmark_cases/
+benchmark_handoff/
+my_benchmark/
+my_benchmark_bak/
+archives/
+*.zip
+*.docx
+
+# Local Agent Navigator experience and generated agent adapters
+.agent-policy/
+AGENTS.md
+CLAUDE.md
+.kiro/steering/agent-policy.md
