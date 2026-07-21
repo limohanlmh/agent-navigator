@@ -21,9 +21,10 @@ class AgentPolicyCliTests(unittest.TestCase):
         self.old_fixed_now = os.environ.get("AGENT_POLICY_FIXED_NOW")
         self.old_home = os.environ.get("HOME")
         self.old_agent_policy_home = os.environ.get("AGENT_POLICY_HOME")
+        self.global_home = self.target / "home"
         os.environ["AGENT_POLICY_FIXED_NOW"] = "2026-06-18T00:00:00Z"
-        os.environ["HOME"] = str(self.target / "home")
-        os.environ.pop("AGENT_POLICY_HOME", None)
+        os.environ["HOME"] = str(self.global_home)
+        os.environ["AGENT_POLICY_HOME"] = str(self.global_home)
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -153,7 +154,7 @@ class AgentPolicyCliTests(unittest.TestCase):
         self.assertIn("trading-review — 交易复盘 (`~/.agent-policy/tasks/trading-review.md`)", current)
         self.assertIn("not copied into the project", current)
         self.assertIn("Recorded enabled task layer", out)
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
         self.assertTrue(task_path.exists())
         task_text = task_path.read_text(encoding="utf-8")
         self.assertIn("Task ID: trading-review", task_text)
@@ -179,7 +180,7 @@ class AgentPolicyCliTests(unittest.TestCase):
     def test_init_global_creates_user_layer(self) -> None:
         out = self.run_cli(["init", "--global"])
         self.assertIn("Initialized global Agent Navigator layer", out)
-        root = Path(os.environ["HOME"]) / ".agent-policy"
+        root = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy"
         self.assertTrue((root / "profile.md").exists())
         self.assertTrue((root / "heuristics.md").exists())
         self.assertTrue((root / "tasks").is_dir())
@@ -188,6 +189,17 @@ class AgentPolicyCliTests(unittest.TestCase):
         heuristics.write_text(heuristics.read_text(encoding="utf-8") + "\n## Preserve me\n", encoding="utf-8")
         self.run_cli(["init", "--global", "--force"])
         self.assertIn("## Preserve me", heuristics.read_text(encoding="utf-8"))
+
+    def test_global_policy_home_override_is_independent_of_home(self) -> None:
+        override_home = self.target / "override-home"
+        regular_home = self.target / "regular-home"
+        os.environ["AGENT_POLICY_HOME"] = str(override_home)
+        os.environ["HOME"] = str(regular_home)
+
+        self.run_cli(["init", "--global"])
+
+        self.assertTrue((override_home / ".agent-policy" / "profile.md").exists())
+        self.assertFalse((regular_home / ".agent-policy").exists())
 
     def test_init_interactive_does_not_crash_and_records_basic_answers(self) -> None:
         with patch("builtins.input", side_effect=EOFError):
@@ -406,7 +418,7 @@ class AgentPolicyCliTests(unittest.TestCase):
                 "--dry-run",
             ]
         )
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
         self.assertIn(str(task_path), out)
         self.assertFalse(task_path.exists())
 
@@ -917,7 +929,7 @@ Steps:
     def test_brief_retrieves_explicit_or_enabled_task_policy_only(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         self.run_cli(["init", "--global"])
-        task_file = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "code-review.md"
+        task_file = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "code-review.md"
         task_file.write_text(
             """# Code Review Task Policy
 
@@ -930,7 +942,7 @@ Keywords: code review, git status, unstaged
 """,
             encoding="utf-8",
         )
-        trading_file = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
+        trading_file = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
         trading_file.write_text(
             """# Trading Review Task Policy
 
@@ -1006,7 +1018,7 @@ Keywords: trading review, sizing, risk
                 "优先检索交易计划、入场理由、止损和退出记录。",
             ]
         )
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
         self.assertTrue(task_path.exists())
         self.assertEqual(task_path.name, "trading-review.md")
         task_text = task_path.read_text(encoding="utf-8")
@@ -1066,7 +1078,7 @@ Keywords: trading review, sizing, risk
             ]
         )
 
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "document-comparison.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "document-comparison.md"
         task_text = task_path.read_text(encoding="utf-8")
         self.assertIn("Task ID: document-comparison", task_text)
         self.assertIn("Display name:", task_text)
@@ -1090,7 +1102,7 @@ Keywords: trading review, sizing, risk
     def test_task_query_match_precedes_broader_task_metadata_matches(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "document-comparison.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "document-comparison.md"
         task_path.write_text(
             """# Task Policy: Document Comparison
 
@@ -1144,7 +1156,7 @@ Verify citations against source evidence.
     def test_selected_task_metadata_retrieves_related_project_experience(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
         task_path.write_text(
             """# Task Policy: Research Notes
 
@@ -1179,7 +1191,7 @@ Status: active
     def test_brief_omits_unmatched_task_heuristic(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
         task_path.write_text(
             """# Task Policy: Research Notes
 
@@ -1293,7 +1305,7 @@ Status: active
                 "Temporary seed search bias.",
             ]
         )
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "document-analysis.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "document-analysis.md"
         task_path.write_text(
             """# Task Policy: Document Analysis
 
@@ -1316,7 +1328,7 @@ Keywords:
     def test_brief_task_policy_overview_prefers_guidance_field(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
         task_path.write_text(
             """# Task Policy: Research Notes
 
@@ -1339,7 +1351,7 @@ Guidance: Preserve source boundaries and separate evidence from interpretation.
     def test_brief_omits_task_metadata_when_no_guidance_sections_exist(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
+        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
         task_path.write_text(
             """# Task Policy: Trading Review
 
@@ -1514,7 +1526,7 @@ Keywords: market context, sizing, execution
     @unittest.skipIf(os.name == "nt", "POSIX permission bits are not available on Windows")
     def test_global_policy_uses_private_permissions(self) -> None:
         self.run_cli(["init", "--global"])
-        root = Path(os.environ["HOME"]) / ".agent-policy"
+        root = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy"
         self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
         self.assertEqual(stat.S_IMODE((root / "tasks").stat().st_mode), 0o700)
         self.assertEqual(stat.S_IMODE((root / "profile.md").stat().st_mode), 0o600)
