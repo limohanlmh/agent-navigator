@@ -450,7 +450,7 @@ For example:
 
 This is a heuristic because it raises the priority of an action without requiring every code-related task to follow exactly the same steps.
 
-### 2.4 K.I.S.S.: Keep the Mechanism Simple
+### 2.4 K.I.S.S.: Keep It Simple, Stupid
 
 #### 2.4.1 Choose a Medium That Both People and LLMs Can Understand Directly
 
