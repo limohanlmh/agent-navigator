@@ -52,7 +52,7 @@ As models continue to improve, their capabilities in code generation, tool use, 
 
 Modern LLMs may advertise context windows ranging from tens of thousands to hundreds of thousands or even millions of tokens. But context-window size is first and foremost a capacity measure; it does not mean that a model can retrieve, understand, and use information across the entire window with equal and stable accuracy. A model's ability to “receive” content and its ability to use that content reliably in later reasoning are different questions.
 
-Studies such as *Lost in the Middle*, RULER, and NoLiMa show that nominal context length and effective context capability are not equivalent. As input grows, performance on retrieval, cross-passage association, and reasoning tasks may decline, with results also affected by information position, distractors, and task complexity.[13][14][15]
+Studies such as *Lost in the Middle*, RULER, and NoLiMa show that nominal context length and effective context capability are not equivalent. As input grows, performance on retrieval, cross-passage association, and reasoning tasks may decline, with results also affected by information position, distractors, and task complexity.<a id="cite-13"></a>[[13]](#ref-13)<a id="cite-14"></a>[[14]](#ref-14)<a id="cite-15"></a>[[15]](#ref-15)
 
 This does not mean that every model fails at a fixed fraction of its context limit. It does show that, for some complex tasks, meaningful degradation can appear well before the nominal limit is reached.
 
@@ -122,9 +122,9 @@ These designs may be highly effective for particular models and tasks, but some 
 
 As new model generations are released, capabilities that once required complex processes may become native model capabilities. Pipelines and prompt techniques refined over long periods can lose marginal value quickly and may even constrain work that a newer model could otherwise perform.
 
-An article in PaperWeekly describes a protein-design hypothesis-generation case in which a team spent months refining pipelines, heuristics, and prompt techniques. After newer GPT and Claude models were released, hypothesis quality improved substantially and some of the previous scaffolding was no longer necessary.[19] A single industry case cannot show that all scaffolding will be displaced by model upgrades, but it illustrates a long-term risk: complex structures built around temporary model weaknesses may depreciate rapidly as base capabilities change. This echoes Rich Sutton's discussion in *The Bitter Lesson* about general methods and manually injected structure.[24]
+An article in PaperWeekly describes a protein-design hypothesis-generation case in which a team spent months refining pipelines, heuristics, and prompt techniques. After newer GPT and Claude models were released, hypothesis quality improved substantially and some of the previous scaffolding was no longer necessary.<a id="cite-19"></a>[[19]](#ref-19) A single industry case cannot show that all scaffolding will be displaced by model upgrades, but it illustrates a long-term risk: complex structures built around temporary model weaknesses may depreciate rapidly as base capabilities change. This echoes Rich Sutton's discussion in *The Bitter Lesson* about general methods and manually injected structure.<a id="cite-24"></a>[[24]](#ref-24)
 
-Lilian Weng's discussion of harness engineering draws a more precise boundary. Stronger models may reduce overengineering around old capability gaps and may absorb some scaffolding into the model, but external goals, context, tool interfaces, and environmental feedback remain.[25] A related Chinese report also discusses this view.[21] The question is therefore not whether to delete all scaffolding, but how to distinguish structures that compensate for a current model from structures that preserve a project's own goals, constraints, and experience.
+Lilian Weng's discussion of harness engineering draws a more precise boundary. Stronger models may reduce overengineering around old capability gaps and may absorb some scaffolding into the model, but external goals, context, tool interfaces, and environmental feedback remain.<a id="cite-25"></a>[[25]](#ref-25) A related Chinese report also discusses this view.<a id="cite-21"></a>[[21]](#ref-21) The question is therefore not whether to delete all scaffolding, but how to distinguish structures that compensate for a current model from structures that preserve a project's own goals, constraints, and experience.
 
 #### 1.4.2 Misalignment Between Local Capability Gains and Real Goals
 
@@ -273,7 +273,7 @@ One of the most basic abstractions in reinforcement learning is the continuing i
 
 <img src="assets/research-and-thought-process/image6.png" style="width:5.76806in;height:2.17917in" />
 
-*Figure 6: Basic agent-environment interaction. The agent acts from a state, and the environment returns the next state and feedback.[22]*
+*Figure 6: Basic agent-environment interaction. The agent acts from a state, and the environment returns the next state and feedback.<a id="cite-22"></a>[[22]](#ref-22)*
 
 Agent Navigator does not train model parameters and does not necessarily convert user feedback into a numerical reward. It adopts the most fundamental perspective from reinforcement learning:
 
@@ -281,7 +281,7 @@ Agent Navigator does not train model parameters and does not necessarily convert
 
 In a real agent task, the environment can include the user, code repository, file system, tools, and external services. An action can be a response, search, tool call, file modification, or command execution. Feedback can come from user corrections, test results, tool errors, or the final task outcome.
 
-Discussions of continual-learning systems often treat experience from real interaction as an important source.[20] Agent Navigator addresses a similar question but adopts a narrower engineering boundary: instead of updating model parameters through online learning, it organizes task feedback into reviewable and reusable Markdown experience files.
+Research on continual-learning systems often treats experience from real interaction as an important source.<a id="cite-60"></a>[[60]](#ref-60) Agent Navigator addresses a similar question but adopts a narrower engineering boundary: instead of updating model parameters through online learning, it organizes task feedback into reviewable and reusable Markdown experience files.
 
 The project borrows the basic structure of an agent interacting continuously with an environment and forming experience from the resulting trajectory. It does not attempt to model the process strictly as a reinforcement-learning problem. It focuses on a more direct engineering question:
 
@@ -420,7 +420,7 @@ The project applies this idea by analogy to agent work:
 
 <img src="assets/research-and-thought-process/image7.png" style="width:5.76806in;height:2.9875in" />
 
-*Figure 7: Experience injection changes search bias. A relevant heuristic enters context at a branch point, shifting the agent from the approximate green path toward the red target path.[23]*
+*Figure 7: Experience injection changes search bias. A relevant heuristic enters context at a branch point, shifting the agent from the approximate green path toward the red target path.<a id="cite-23"></a>[[23]](#ref-23)*
 
 Without experience injection, an agent relies mainly on the current conversation, loaded files, and the model's default tendencies when choosing its next action.
 
@@ -547,6 +547,8 @@ This division deliberately keeps the system boundary small: Agent Navigator mana
 
 ## References and Further Reading
 
+### Products, Tools, and Open Specifications
+
 1. [OpenAI, Building self-improving tax agents with Codex](https://openai.com/index/building-self-improving-tax-agents-with-codex/); [Chinese version](https://openai.com/zh-Hans-CN/index/building-self-improving-tax-agents-with-codex/)
 2. [Yao et al., ReAct: Synergizing Reasoning and Acting in Language Models](https://arxiv.org/abs/2210.03629)
 3. [Andrej Karpathy, LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
@@ -559,19 +561,29 @@ This division deliberately keeps the system boundary small: Agent Navigator mana
 10. [AGENTS.md open format](https://agents.md/); [OpenAI Codex, AGENTS.md best practices](https://developers.openai.com/codex/learn/best-practices)
 11. [Kiro Steering](https://kiro.dev/docs/steering/); [Kiro Specs](https://kiro.dev/docs/specs/); [Kiro Hooks](https://kiro.dev/docs/hooks/)
 12. [Agent Skills Specification](https://agentskills.io/specification)
-13. [Liu et al., Lost in the Middle: How Language Models Use Long Contexts](https://aclanthology.org/2024.tacl-1.9/)
-14. [Hsieh et al., RULER: What's the Real Context Size of Your Long-Context Language Models?](https://arxiv.org/abs/2404.06654)
-15. [Modarressi et al., NoLiMa: Long-Context Evaluation Beyond Literal Matching](https://proceedings.mlr.press/v267/modarressi25a.html)
+### Context, Memory, and Experience
+
+13. <a id="ref-13"></a>[Liu et al., Lost in the Middle: How Language Models Use Long Contexts](https://aclanthology.org/2024.tacl-1.9/) [↩](#cite-13)
+14. <a id="ref-14"></a>[Hsieh et al., RULER: What's the Real Context Size of Your Long-Context Language Models?](https://arxiv.org/abs/2404.06654) [↩](#cite-14)
+15. <a id="ref-15"></a>[Modarressi et al., NoLiMa: Long-Context Evaluation Beyond Literal Matching](https://proceedings.mlr.press/v267/modarressi25a.html) [↩](#cite-15)
 16. [Hong, Troynikov, Huber, Context Rot: How Increasing Input Tokens Impacts LLM Performance](https://www.trychroma.com/research/context-rot)
 17. [Anthropic, Context windows](https://platform.claude.com/docs/en/build-with-claude/context-windows)
 18. [Anthropic, Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
-19. [Liu Jiachen, “Even If AI Scientists Become Ten Times Smarter, Science Still Cannot Move Faster: The Bottleneck Is the 300-Year-Old ‘Paper,’” PaperWeekly, 2026-07-01 (Chinese)](https://mp.weixin.qq.com/s/kvzh0kBeb4vuvzNNi4YhFA)
+### Model Capabilities, Harnesses, and Continual Learning
+
+19. <a id="ref-19"></a>[Liu Jiachen, “Even If AI Scientists Become Ten Times Smarter, Science Still Cannot Move Faster: The Bottleneck Is the 300-Year-Old ‘Paper,’” PaperWeekly, 2026-07-01 (Chinese)](https://mp.weixin.qq.com/s/kvzh0kBeb4vuvzNNi4YhFA) [↩](#cite-19)
 20. [Zhang Jinyi, “Richard Sutton, the Father of Reinforcement Learning, Announces a Startup in His Late Sixties and Challenges the LLM Paradigm,” DeepTech, 2026-07-14 (Chinese)](https://mp.weixin.qq.com/s/cUog1qtUw6_3TNKZwnzmSw)
-21. [Liu Yakun, “Lilian Weng's Latest Blog: We May Have Overestimated the Model but Seriously Underestimated the Harness,” DeepTech, 2026-07-07 (Chinese)](https://mp.weixin.qq.com/s/X7EtgCIBPk6f59TZM2VOsg)
-22. [Sutton and Barto, Reinforcement Learning: An Introduction](http://incompleteideas.net/book/the-book-2nd.html)
-23. [Hart, Nilsson, Raphael, A Formal Basis for the Heuristic Determination of Minimum Cost Paths](https://doi.org/10.1109/TSSC.1968.300136)
-24. [Rich Sutton, The Bitter Lesson](http://www.incompleteideas.net/IncIdeas/BitterLesson.html)
-25. [Lilian Weng, Harness Engineering for Self-Improvement](https://lilianweng.github.io/posts/2026-07-04-harness/)
+21. <a id="ref-21"></a>[Liu Yakun, “Lilian Weng's Latest Blog: We May Have Overestimated the Model but Seriously Underestimated the Harness,” DeepTech, 2026-07-07 (Chinese)](https://mp.weixin.qq.com/s/X7EtgCIBPk6f59TZM2VOsg) [↩](#cite-21)
+
+### Reinforcement Learning and Search Foundations
+
+22. <a id="ref-22"></a>[Sutton and Barto, Reinforcement Learning: An Introduction](http://incompleteideas.net/book/the-book-2nd.html) [↩](#cite-22)
+23. <a id="ref-23"></a>[Hart, Nilsson, Raphael, A Formal Basis for the Heuristic Determination of Minimum Cost Paths](https://doi.org/10.1109/TSSC.1968.300136) [↩](#cite-23)
+24. <a id="ref-24"></a>[Rich Sutton, The Bitter Lesson](http://www.incompleteideas.net/IncIdeas/BitterLesson.html) [↩](#cite-24)
+25. <a id="ref-25"></a>[Lilian Weng, Harness Engineering for Self-Improvement](https://lilianweng.github.io/posts/2026-07-04-harness/) [↩](#cite-25)
+
+### Agent Runtimes, Frameworks, and Collaboration
+
 26. [OpenAI Cookbook, Build an Agent Improvement Loop with Traces, Evals, and Codex](https://developers.openai.com/cookbook/examples/agents_sdk/agent_improvement_loop)
 27. [OpenAI Codex documentation](https://developers.openai.com/codex)
 28. [OpenAI Codex, AGENTS.md guide](https://developers.openai.com/codex/guides/agents-md)
@@ -587,6 +599,8 @@ This division deliberately keeps the system boundary small: Agent Navigator mana
 38. [Model Context Protocol, Introduction](https://modelcontextprotocol.io/docs/getting-started/intro); [Specification](https://modelcontextprotocol.io/specification)
 39. [LangChain, Multi-agent](https://docs.langchain.com/oss/python/langchain/multi-agent)
 40. [LangChain, Human-in-the-loop](https://docs.langchain.com/oss/python/langchain/human-in-the-loop); [LangGraph, Interrupts](https://docs.langchain.com/oss/python/langgraph/interrupts)
+### Agent Memory, Reflection, and Software Engineering
+
 41. [ReAct project page](https://react-lm.github.io/)
 42. [Brown et al., Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165)
 43. [Holtzman et al., The Curious Case of Neural Text Degeneration](https://arxiv.org/abs/1904.09751)
@@ -597,6 +611,8 @@ This division deliberately keeps the system boundary small: Agent Navigator mana
 48. [Microsoft AutoGen Studio, A No-Code Developer Tool for Building and Debugging Multi-Agent Systems](https://arxiv.org/abs/2408.15247)
 49. [Guo et al., LLM Multi-Agent Systems: Challenges and Open Problems](https://arxiv.org/abs/2402.03578)
 50. [Wu et al., AgentCoord: Visually Exploring Coordination Strategy for LLM-based Multi-Agent Collaboration](https://arxiv.org/abs/2404.11943)
+### Coding-Agent Configuration and Experience Research
+
 51. [On the Use of Agentic Coding Manifests: An Empirical Study of Claude Code](https://arxiv.org/abs/2509.14744)
 52. [The Impact of AGENTS.md Files on AI Coding Agents](https://arxiv.org/abs/2601.20404)
 53. [Bootstrapping Coding Agents: Assessing the Impact of Repository Documentation on Coding LLMs](https://arxiv.org/abs/2603.17399)
@@ -604,5 +620,14 @@ This division deliberately keeps the system boundary small: Agent Navigator mana
 55. [ZORO: Active Rules for Reliable Vibe Coding](https://arxiv.org/abs/2604.15625)
 56. [Context Rot in AI-Assisted Software Development](https://arxiv.org/abs/2606.09090)
 57. [Configuration Smells in AGENTS.md Files: Common Mistakes in Configuring Coding Agents](https://arxiv.org/abs/2606.15828)
+### Community Implementations and Additional Research
+
 58. [LuciferForge/claude-code-memory](https://github.com/LuciferForge/claude-code-memory)
 59. [centminmod/my-claude-code-setup](https://github.com/centminmod/my-claude-code-setup)
+60. <a id="ref-60"></a>[Khetarpal et al., Towards Continual Reinforcement Learning: A Review and Perspectives](https://arxiv.org/abs/2012.13490) [↩](#cite-60)
+61. [Park et al., Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442)
+62. [Packer et al., MemGPT: Towards LLMs as Operating Systems](https://arxiv.org/abs/2310.08560)
+63. [Wang et al., Voyager: An Open-Ended Embodied Agent with Large Language Models](https://arxiv.org/abs/2305.16291)
+64. [Yang et al., SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering](https://arxiv.org/abs/2405.15793)
+65. [Liu et al., AgentBench: Evaluating LLMs as Agents](https://arxiv.org/abs/2308.03688)
+66. [Jimenez et al., SWE-bench: Can Language Models Resolve Real-World GitHub Issues?](https://arxiv.org/abs/2310.06770)
