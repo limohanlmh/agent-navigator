@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -11,10 +12,18 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from agent_navigator import __version__
 from agent_navigator.cli import main
 
 
 class AgentPolicyCliTests(unittest.TestCase):
+    def test_package_version_matches_project_metadata(self) -> None:
+        project_metadata = (Path(__file__).parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+        match = re.search(r'^version = "([^"]+)"$', project_metadata, flags=re.MULTILINE)
+
+        self.assertIsNotNone(match)
+        self.assertEqual(__version__, match.group(1))
+
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.target = Path(self.tmp.name)
