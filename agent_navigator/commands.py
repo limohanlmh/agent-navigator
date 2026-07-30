@@ -41,7 +41,7 @@ FEEDBACK_TYPES = LESSON_TYPES | {"heuristic"}
 FEEDBACK_STATUSES = {"active", "candidate"}
 HEURISTIC_STATUSES = FEEDBACK_STATUSES
 TASK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-GITIGNORE_LINES = [
+BASE_GITIGNORE_LINES = [
     "__pycache__/",
     "*.py[cod]",
     ".pytest_cache/",
@@ -52,6 +52,8 @@ GITIGNORE_LINES = [
     "build/",
     "*.egg-info/",
     "",
+]
+AGENT_NAVIGATOR_GITIGNORE_LINES = [
     "# Generated temporary Agent Navigator files",
     ".agent-policy/brief.md",
     ".agent-policy/lessons.compact.md",
@@ -61,6 +63,7 @@ GITIGNORE_LINES = [
     "CLAUDE.md",
     ".kiro/steering/agent-policy.md",
 ]
+GITIGNORE_LINES = BASE_GITIGNORE_LINES + AGENT_NAVIGATOR_GITIGNORE_LINES
 LEGACY_AGENT_GUIDANCE_NAMES = {"agent.md"}
 REPLACEABLE_ENTRY_FILES = {
     "lessons": "lessons.md",
@@ -157,7 +160,13 @@ class RetrievalContext:
     task_terms: set[str]
 
 
-def init_policy(target: str = ".", force: bool = False, global_policy: bool = False, interactive: bool = False) -> CommandResult:
+def init_policy(
+    target: str = ".",
+    force: bool = False,
+    global_policy: bool = False,
+    interactive: bool = False,
+    add_ignore: bool = True,
+) -> CommandResult:
     if global_policy:
         return init_global_policy(force=force)
 
@@ -188,9 +197,10 @@ def init_policy(target: str = ".", force: bool = False, global_policy: bool = Fa
             skipped.append(relative)
 
     updated_legacy, pending_legacy = handle_legacy_agent_guidance(repo, root)
-    gitignore_result = ensure_gitignore(repo)
-    if gitignore_result:
-        created.append(gitignore_result)
+    if add_ignore:
+        gitignore_result = ensure_gitignore(repo)
+        if gitignore_result:
+            created.append(gitignore_result)
 
     legacy = [relative for relative in LEGACY_PATHS if (repo / relative).exists()]
     lines = [f"Initialized Agent Navigator experience layer at {repo}"]
@@ -1833,3 +1843,56 @@ def ensure_gitignore(repo: Path) -> str:
 
     update_text(path, merge, root=repo)
     return ".gitignore" if changed else ""
+
+
+def manage_agent_navigator_ignore(target: str, action: str) -> CommandResult:
+    repo = resolve_target(target)
+    if action == "add":
+        changed = ensure_agent_navigator_ignore(repo)
+        message = "Added Agent Navigator ignore rules to .gitignore" if changed else "Agent Navigator ignore rules are already present"
+        return CommandResult(message)
+    if action == "remove":
+        changed = remove_agent_navigator_ignore(repo)
+        message = "Removed Agent Navigator ignore rules from .gitignore" if changed else "No Agent Navigator ignore rules found in .gitignore"
+        return CommandResult(message)
+    raise ValueError(f"Unsupported ignore action: {action}")
+
+
+def ensure_agent_navigator_ignore(repo: Path) -> bool:
+    path = repo / ".gitignore"
+    changed = False
+
+    def merge(existing: str) -> str:
+        nonlocal changed
+        current_lines = set(existing.splitlines())
+        missing = [line for line in AGENT_NAVIGATOR_GITIGNORE_LINES if line and line not in current_lines]
+        if not missing:
+            return existing
+        changed = True
+        addition = "\n".join(missing)
+        separator = "\n\n" if existing.strip() else ""
+        return existing.rstrip() + separator + addition + "\n"
+
+    update_text(path, merge, root=repo)
+    return changed
+
+
+def remove_agent_navigator_ignore(repo: Path) -> bool:
+    path = repo / ".gitignore"
+    if not path.exists():
+        return False
+    managed_lines = set(AGENT_NAVIGATOR_GITIGNORE_LINES)
+    changed = False
+
+    def merge(existing: str) -> str:
+        nonlocal changed
+        lines = existing.splitlines()
+        filtered = [line for line in lines if line not in managed_lines]
+        if filtered == lines:
+            return existing
+        changed = True
+        result = "\n".join(filtered).rstrip()
+        return result + "\n" if result else ""
+
+    update_text(path, merge, root=repo)
+    return changed

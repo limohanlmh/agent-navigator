@@ -14,6 +14,7 @@ from .commands import (
     compact_lessons,
     import_sources,
     init_policy,
+    manage_agent_navigator_ignore,
     replace_entry,
     setup_task_layers,
     sync_adapters,
@@ -36,6 +37,11 @@ def build_parser(prog: str = "agent-navi") -> argparse.ArgumentParser:
     )
     init.add_argument("--global", dest="global_policy", action="store_true", help="Create ~/.agent-policy/ user/task layer")
     init.add_argument("--interactive", action="store_true", help="Collect lightweight project setup notes")
+    init.add_argument("--no-ignore", dest="add_ignore", action="store_false", help="Do not create or modify .gitignore")
+
+    ignore = sub.add_parser("ignore", help="Manage Agent Navigator .gitignore entries")
+    ignore.add_argument("action", choices=["add", "remove"])
+    add_target(ignore)
 
     setup = sub.add_parser("setup", help="Record retrieval-overlay setup choices for this project")
     add_target(setup)
@@ -124,7 +130,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "init":
-        result = init_policy(args.target, args.force, args.global_policy, args.interactive)
+        result = init_policy(args.target, args.force, args.global_policy, args.interactive, args.add_ignore)
+    elif args.command == "ignore":
+        result = manage_agent_navigator_ignore(args.target, args.action)
     elif args.command == "setup":
         result = setup_task_layers(args.target, args.task, display=args.display)
     elif args.command == "add-feedback":

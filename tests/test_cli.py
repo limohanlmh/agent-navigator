@@ -147,6 +147,35 @@ class AgentPolicyCliTests(unittest.TestCase):
         inbox = (self.target / ".agent-policy" / "inbox.md").read_text(encoding="utf-8")
         self.assertIn("not an audit log", inbox)
 
+    def test_init_no_ignore_leaves_gitignore_untouched(self) -> None:
+        gitignore = self.target / ".gitignore"
+        gitignore.write_text("custom-output/\n", encoding="utf-8")
+
+        self.run_cli(["init", "--target", str(self.target), "--no-ignore"])
+
+        self.assertEqual("custom-output/\n", gitignore.read_text(encoding="utf-8"))
+        self.assertTrue((self.target / "AGENTS.md").exists())
+
+    def test_ignore_add_and_remove_only_manage_agent_navigator_rules(self) -> None:
+        gitignore = self.target / ".gitignore"
+        gitignore.write_text("custom-output/\n.agent-policy/\n", encoding="utf-8")
+
+        out = self.run_cli(["ignore", "add", "--target", str(self.target)])
+        self.assertIn("Added Agent Navigator ignore rules", out)
+        added = gitignore.read_text(encoding="utf-8")
+        self.assertIn("AGENTS.md", added)
+        self.assertIn("CLAUDE.md", added)
+        self.assertIn(".kiro/steering/agent-policy.md", added)
+
+        out = self.run_cli(["ignore", "remove", "--target", str(self.target)])
+        self.assertIn("Removed Agent Navigator ignore rules", out)
+        removed = gitignore.read_text(encoding="utf-8")
+        self.assertIn("custom-output/", removed)
+        self.assertIn(".agent-policy/", removed)
+        self.assertNotIn("AGENTS.md", removed)
+        self.assertNotIn("CLAUDE.md", removed)
+        self.assertNotIn(".kiro/steering/agent-policy.md", removed)
+
     def test_setup_task_records_enabled_layer_without_copying_policy(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
 

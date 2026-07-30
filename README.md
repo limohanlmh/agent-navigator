@@ -354,7 +354,9 @@ CLI 只提供文件边界、精确替换、同步和轻量检查。是否值得�
 | 命令 | 作用 |
 |---|---|
 | `init` | 初始化项目经验层和 Agent 入口 |
+| `init --no-ignore` | 初始化但不创建或修改 `.gitignore` |
 | `init --global` | 初始化私有的用户层和任务层 |
+| `ignore add` / `ignore remove` | 添加或移除 Agent Navigator 管理的忽略规则 |
 | `setup --task <id>` | 在项目中启用一个明确的任务层 |
 | `brief` | 生成当前任务的临时紧凑指导 |
 | `sync` | 更新生成的 Agent adapter marker block |
@@ -371,6 +373,10 @@ CLI 只提供文件边界、精确替换、同步和轻量检查。是否值得�
 # 初始化当前项目
 agent-navi init --target .
 
+# 后续添加或移除 Agent Navigator 忽略规则
+agent-navi ignore add --target .
+agent-navi ignore remove --target .
+
 # 初始化私有 user / task 层
 agent-navi init --global
 
@@ -384,7 +390,7 @@ agent-navi brief --target . "review current code changes" --task code-review
 agent-navi sync --target .
 ```
 
-`init --force` 会重新生成 adapter，但保留已经积累的项目经验 Markdown。`sync` 默认只更新生成标记内的内容，并保留文件中其他用户内容。
+`init --force` 会重新生成 adapter，但保留已经积累的项目经验 Markdown。`init --no-ignore` 不会创建或修改 `.gitignore`。`ignore remove` 仅移除 Agent Navigator 管理的具体规则，不会移除用户自己的宽泛或自定义忽略项。`sync` 默认只更新生成标记内的内容，并保留文件中其他用户内容。
 
 完整参数见：
 
