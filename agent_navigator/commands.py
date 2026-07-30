@@ -57,6 +57,9 @@ GITIGNORE_LINES = [
     ".agent-policy/lessons.compact.md",
     ".agent-policy/heuristics.compact.md",
     ".agent-policy/local.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".kiro/steering/agent-policy.md",
 ]
 LEGACY_AGENT_GUIDANCE_NAMES = {"agent.md"}
 REPLACEABLE_ENTRY_FILES = {

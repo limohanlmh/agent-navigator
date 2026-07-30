@@ -235,10 +235,10 @@ CLI 到这里已经完成了最主要的初始化工作。后续不需要为了�
 2. **应用**：经验实际影响了检索范围、检查顺序、计划或输出结构；
 3. **维护**：真实任务形成稳定信号后，Agent 正确更新了最相关的经验条目。
 
-如果项目使用 Git，也可以直接检查文件变化：
+生成的 Agent 入口默认由 Git 忽略；如果项目使用 Git，可以确认忽略规则：
 
 ```bash
-git diff -- AGENTS.md CLAUDE.md .kiro/steering .agent-policy
+git check-ignore -v AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md
 ```
 
 没有文件变化并不一定代表失败。只有当本轮形成了清晰、稳定、可复用的新经验时，才应该更新经验层。

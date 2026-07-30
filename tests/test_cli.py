@@ -141,6 +141,9 @@ class AgentPolicyCliTests(unittest.TestCase):
         gitignore = (self.target / ".gitignore").read_text(encoding="utf-8")
         self.assertIn(".agent-policy/heuristics.compact.md", gitignore)
         self.assertIn(".agent-policy/local.md", gitignore)
+        self.assertIn("AGENTS.md", gitignore)
+        self.assertIn("CLAUDE.md", gitignore)
+        self.assertIn(".kiro/steering/agent-policy.md", gitignore)
         inbox = (self.target / ".agent-policy" / "inbox.md").read_text(encoding="utf-8")
         self.assertIn("not an audit log", inbox)
 
