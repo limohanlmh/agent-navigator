@@ -195,6 +195,33 @@ CLI 到这里已经完成了最主要的初始化工作。后续不需要为了�
 
 用户通常不需要手工运行 `add-feedback` 或 `add-heuristic`。理解完整对话的 Agent 更适合判断一条反馈是否值得保存、适用于哪个范围，以及应该更新已有条目还是新增条目。
 
+### 两种补充使用场景
+
+#### 1. 从原始 Markdown 资料提炼项目经验
+
+如果已有聊天历史、复盘记录、项目说明或其他 Markdown 资料，可以先将它们导入项目：
+
+```bash
+agent-navi import --target . --applies-to "project history" /path/to/history.md /path/to/notes.md
+```
+
+`import` 会将原始文件复制到 `.agent-policy/imports/raw/`，并在 `inbox.md` 中留下待处理线索；它不会把整段聊天自动当作 Policy。然后在 Codex、Claude Code 或其他 Agent 中明确请求提炼：
+
+```text
+请审阅刚导入的项目资料，并结合当前项目更新 agent-policy。
+```
+
+#### 2. 在 Agent 工具中执行一次全面维护
+
+当经验层已积累较久、项目告一段落，或为一个旧项目首次引入 Agent Navigator 后，可以直接把维护本身作为任务交给 Codex 等工具：
+
+```text
+请对当前项目进行一次完整的 agent-policy 回顾和更新。
+结合已有项目资料，梳理对项目和后续执行有帮助的经验，更新到合适的位置，并简要说明改动。
+```
+
+这是显式维护任务，因此 Agent 可以完整审阅相关项目 Policy 文件；日常任务仍应只检索少量真正相关的条目。
+
 ### 什么内容值得沉淀？
 
 经验不只是错误纠正，也可以来自：

@@ -197,6 +197,33 @@ Real task
 
 Users usually do not need to run `add-feedback` or `add-heuristic` manually. An agent that understands the full conversation is better positioned to judge whether feedback is worth saving, which scope it belongs to, and whether to update an existing entry or add a new one.
 
+### Two Additional Usage Scenarios
+
+#### 1. Distill Project Experience from Raw Markdown Material
+
+When you have chat history, retrospectives, project notes, or other Markdown material, first import it into the project:
+
+```bash
+agent-navi import --target . --applies-to "project history" /path/to/history.md /path/to/notes.md
+```
+
+`import` copies the raw file into `.agent-policy/imports/raw/` and records a follow-up note in `inbox.md`; it does not automatically treat an entire chat as policy. Then explicitly ask Codex, Claude Code, or another agent to distill it:
+
+```text
+Review the newly imported project material and update the current project's agent-policy.
+```
+
+#### 2. Run a Full Maintenance Pass in an Agent Tool
+
+When the experience layer has accumulated over time, a project phase has ended, or Agent Navigator is being introduced to an existing project for the first time, make maintenance itself an explicit task in Codex or another agent tool:
+
+```text
+Perform a complete agent-policy review and update for the current project.
+Use the existing project material to organize experience that helps the project and future execution, update it in the appropriate places, and briefly report the changes.
+```
+
+Because this is an explicit maintenance task, the agent may review the relevant project policy files in full. During everyday tasks it should still retrieve only the small subset that is genuinely relevant.
+
 ### What Is Worth Preserving?
 
 Experience is not limited to error correction. It can also come from:
@@ -237,10 +264,10 @@ Adoption can be observed at three levels:
 2. **Application**: the experience actually changes the retrieval scope, checking order, plan, or output structure.
 3. **Maintenance**: after a stable signal emerges from real work, the agent updates the most relevant experience entry correctly.
 
-If the project uses Git, you can inspect file changes directly:
+Generated agent entry points are ignored by default. If the project uses Git, verify the ignore rules:
 
 ```bash
-git diff -- AGENTS.md CLAUDE.md .kiro/steering .agent-policy
+git check-ignore -v AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md
 ```
 
 The absence of a file change does not necessarily indicate failure. The experience layer should be updated only when the current work produces a clear, stable, and reusable signal.
@@ -356,7 +383,9 @@ Most users start with `init` and then let the agent maintain the experience laye
 | Command | Purpose |
 |---|---|
 | `init` | Initialize the project experience layer and agent entry points |
+| `init --no-ignore` | Initialize without creating or modifying `.gitignore` |
 | `init --global` | Initialize private user and task layers |
+| `ignore add` / `ignore remove` | Add or remove Agent Navigator-managed ignore rules |
 | `setup --task <id>` | Enable an explicit task layer in the project |
 | `brief` | Generate compact temporary guidance for the current task |
 | `sync` | Update generated agent adapter marker blocks |
@@ -373,6 +402,10 @@ Common examples:
 # Initialize the current project
 agent-navi init --target .
 
+# Add or remove Agent Navigator ignore rules later
+agent-navi ignore add --target .
+agent-navi ignore remove --target .
+
 # Initialize private user and task layers
 agent-navi init --global
 
@@ -386,7 +419,7 @@ agent-navi brief --target . "review current code changes" --task code-review
 agent-navi sync --target .
 ```
 
-`init --force` regenerates adapters while preserving accumulated project experience stored in Markdown. By default, `sync` updates only content inside generated marker blocks and preserves other user-authored content in those files.
+`init --force` regenerates adapters while preserving accumulated project experience stored in Markdown. `init --no-ignore` does not create or modify `.gitignore`. `ignore remove` removes only the specific rules managed by Agent Navigator and preserves broad or custom user ignore rules. By default, `sync` updates only content inside generated marker blocks and preserves other user-authored content in those files.
 
 For full command options, run:
 
