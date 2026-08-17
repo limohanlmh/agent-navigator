@@ -61,12 +61,14 @@ class AgentPolicyCliTests(unittest.TestCase):
             code = main(args)
         return code, stream.getvalue()
 
-    def test_init_creates_minimal_layer_without_brief(self) -> None:
+    def test_init_creates_minimal_layer(self) -> None:
         out = self.run_cli(["init", "--target", str(self.target)])
         self.assertIn("Initialized Agent Navigator experience layer", out)
+        self.assertNotIn("redistribute its contents by meaning", out)
 
         expected = [
             ".agent-policy/current.md",
+            ".agent-policy/knowledge.md",
             ".agent-policy/lessons.md",
             ".agent-policy/heuristics.md",
             ".agent-policy/playbooks.md",
@@ -101,7 +103,7 @@ class AgentPolicyCliTests(unittest.TestCase):
         self.assertIn("<!-- agent-policy:start -->", agents)
         self.assertIn("retrieval-overlay policy stack", agents)
         self.assertIn("heuristics.md", agents)
-        self.assertIn("even if it appeared after the conversation began", agents)
+        self.assertIn("even if they appeared after the conversation began", agents)
         self.assertIn("## Policy Layers", agents)
         self.assertIn("~/.agent-policy/tasks/<task-id>.md", agents)
         self.assertIn("~/.agent-policy/profile.md", agents)
@@ -114,6 +116,14 @@ class AgentPolicyCliTests(unittest.TestCase):
         self.assertIn("policy prose and descriptive metadata in English", agents)
         self.assertIn("preserve identifiers exactly", agents)
         self.assertIn("use a short one-line title", agents)
+        self.assertIn("more than one project scope", agents)
+        self.assertIn("read its local agent guidance", agents)
+        self.assertIn("relevant project scope's `knowledge.md`", agents)
+        self.assertIn("read the relevant file in full as a final fallback", agents)
+        self.assertIn("Use `current.md` only for compact project guidance", agents)
+        self.assertIn("Store stable descriptive project facts in `knowledge.md`", agents)
+        self.assertIn("do not treat the starting project as the scope for the whole task", agents)
+        self.assertIn("agent-navi init --target <project-root>", agents)
         self.assertIn("signal, reusable takeaway, and future behavior are all clear", agents)
         self.assertIn("user intent is explicit, scope is clear, confidence is high", agents)
         self.assertIn("use more than one only when each serves a distinct purpose", agents)
@@ -131,11 +141,17 @@ class AgentPolicyCliTests(unittest.TestCase):
             self.assertIn("user intent is explicit, scope is clear, confidence is high", adapter)
             self.assertIn("current conversation, not only the latest message", adapter)
         current = (self.target / ".agent-policy" / "current.md").read_text(encoding="utf-8")
-        self.assertIn("project-specific current guidance", current)
+        self.assertIn("should be considered whenever this project scope becomes relevant", current)
+        self.assertIn("Do not use this file for project knowledge", current)
         self.assertIn("## Project guidance", current)
         self.assertNotIn("Agent-native maintenance", current)
         self.assertNotIn("Lesson write threshold", current)
         self.assertNotIn("Heuristic write threshold", current)
+        knowledge = (self.target / ".agent-policy" / "knowledge.md").read_text(encoding="utf-8")
+        self.assertIn("Stable project-local facts", knowledge)
+        self.assertIn("do not load it by default", knowledge)
+        self.assertIn("reading the full file is the final fallback", knowledge)
+        self.assertIn("Put project guidance in `current.md`", knowledge)
         lessons = (self.target / ".agent-policy" / "lessons.md").read_text(encoding="utf-8")
         self.assertIn("use a short one-line human-readable title", lessons)
         self.assertIn("reusable future behavior", lessons)
@@ -148,13 +164,35 @@ class AgentPolicyCliTests(unittest.TestCase):
         playbooks = (self.target / ".agent-policy" / "playbooks.md").read_text(encoding="utf-8")
         self.assertIn("    ## Short task name", playbooks)
         gitignore = (self.target / ".gitignore").read_text(encoding="utf-8")
-        self.assertIn(".agent-policy/heuristics.compact.md", gitignore)
-        self.assertIn(".agent-policy/local.md", gitignore)
+        self.assertIn(".agent-policy/", gitignore)
+        self.assertNotIn(".agent-policy/heuristics.compact.md", gitignore)
+        self.assertNotIn(".agent-policy/local.md", gitignore)
         self.assertIn("AGENTS.md", gitignore)
         self.assertIn("CLAUDE.md", gitignore)
         self.assertIn(".kiro/steering/agent-policy.md", gitignore)
         inbox = (self.target / ".agent-policy" / "inbox.md").read_text(encoding="utf-8")
         self.assertIn("not an audit log", inbox)
+
+    def test_init_suggests_one_time_current_knowledge_migration(self) -> None:
+        policy = self.target / ".agent-policy"
+        policy.mkdir()
+        current = policy / "current.md"
+        original = "# Current Agent Guidance\n\nExisting project facts and guidance.\n"
+        current.write_text(original, encoding="utf-8")
+
+        first = self.run_cli(["init", "--target", str(self.target)])
+
+        self.assertTrue((policy / "knowledge.md").exists())
+        self.assertEqual(original, current.read_text(encoding="utf-8"))
+        self.assertIn("Created .agent-policy/knowledge.md and preserved the existing current.md", first)
+        self.assertIn("Review .agent-policy/current.md incrementally", first)
+        self.assertNotIn("0.2", first)
+        self.assertNotIn("0.3", first)
+
+        second = self.run_cli(["init", "--target", str(self.target)])
+
+        self.assertNotIn("redistribute its contents by meaning", second)
+        self.assertEqual(original, current.read_text(encoding="utf-8"))
 
     def test_init_no_ignore_leaves_gitignore_untouched(self) -> None:
         gitignore = self.target / ".gitignore"
@@ -164,6 +202,36 @@ class AgentPolicyCliTests(unittest.TestCase):
 
         self.assertEqual("custom-output/\n", gitignore.read_text(encoding="utf-8"))
         self.assertTrue((self.target / "AGENTS.md").exists())
+
+    def test_init_replaces_legacy_per_file_ignore_rules(self) -> None:
+        gitignore = self.target / ".gitignore"
+        gitignore.write_text(
+            "# Generated temporary Agent Navigator files\n"
+            ".agent-policy/brief.md\n"
+            ".agent-policy/lessons.compact.md\n"
+            ".agent-policy/heuristics.compact.md\n"
+            ".agent-policy/local.md\n",
+            encoding="utf-8",
+        )
+
+        self.run_cli(["init", "--target", str(self.target)])
+
+        updated = gitignore.read_text(encoding="utf-8")
+        self.assertIn(".agent-policy/", updated)
+        self.assertNotIn(".agent-policy/brief.md", updated)
+        self.assertFalse(updated.startswith("\n"))
+
+    def test_init_reports_legacy_brief_without_deleting_it(self) -> None:
+        policy = self.target / ".agent-policy"
+        policy.mkdir()
+        legacy_brief = policy / "brief.md"
+        legacy_brief.write_text("legacy task snapshot\n", encoding="utf-8")
+
+        out = self.run_cli(["init", "--target", str(self.target)])
+
+        self.assertIn("Legacy paths left in place; new commands do not use them", out)
+        self.assertIn(".agent-policy/brief.md", out)
+        self.assertEqual("legacy task snapshot\n", legacy_brief.read_text(encoding="utf-8"))
 
     def test_ignore_add_and_remove_only_manage_agent_navigator_rules(self) -> None:
         gitignore = self.target / ".gitignore"
@@ -180,10 +248,45 @@ class AgentPolicyCliTests(unittest.TestCase):
         self.assertIn("Removed Agent Navigator ignore rules", out)
         removed = gitignore.read_text(encoding="utf-8")
         self.assertIn("custom-output/", removed)
-        self.assertIn(".agent-policy/", removed)
+        self.assertNotIn(".agent-policy/", removed)
         self.assertNotIn("AGENTS.md", removed)
         self.assertNotIn("CLAUDE.md", removed)
         self.assertNotIn(".kiro/steering/agent-policy.md", removed)
+
+    def test_ignore_add_replaces_legacy_per_file_rules(self) -> None:
+        gitignore = self.target / ".gitignore"
+        gitignore.write_text(
+            "custom-output/\n"
+            "# Generated temporary Agent Navigator files\n"
+            ".agent-policy/brief.md\n"
+            ".agent-policy/lessons.compact.md\n"
+            ".agent-policy/heuristics.compact.md\n"
+            ".agent-policy/local.md\n",
+            encoding="utf-8",
+        )
+
+        self.run_cli(["ignore", "add", "--target", str(self.target)])
+
+        updated = gitignore.read_text(encoding="utf-8")
+        self.assertIn("custom-output/", updated)
+        self.assertIn(".agent-policy/", updated)
+        self.assertNotIn(".agent-policy/brief.md", updated)
+        self.assertNotIn(".agent-policy/heuristics.compact.md", updated)
+
+    def test_ignore_add_warns_when_policy_files_are_already_tracked(self) -> None:
+        policy = self.target / ".agent-policy"
+        policy.mkdir()
+        heuristic = policy / "heuristics.md"
+        heuristic.write_text("# Heuristics\n", encoding="utf-8")
+        subprocess.run(["git", "init", "--quiet"], cwd=self.target, check=True)
+        subprocess.run(["git", "add", ".agent-policy/heuristics.md"], cwd=self.target, check=True)
+
+        out = self.run_cli(["ignore", "add", "--target", str(self.target)])
+
+        self.assertIn("Git already tracks Agent Navigator files", out)
+        self.assertIn(".agent-policy/heuristics.md", out)
+        self.assertIn("git rm -r --cached --ignore-unmatch", out)
+        self.assertTrue(heuristic.exists())
 
     def test_setup_task_records_enabled_layer_without_copying_policy(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
@@ -616,6 +719,48 @@ Steps:
         self.assertIn("2. Run tests.", updated)
         self.assertIn("3. Sync and verify adapters.", updated)
 
+    def test_replace_entry_supports_project_knowledge(self) -> None:
+        self.run_cli(["init", "--target", str(self.target)])
+        knowledge_path = self.target / ".agent-policy" / "knowledge.md"
+        knowledge_path.write_text(
+            """# Project Knowledge
+
+## Service ownership
+
+Keywords: service, ownership
+
+The worker owns report generation.
+""",
+            encoding="utf-8",
+        )
+        replacement = self.target / "replacement-knowledge.md"
+        replacement.write_text(
+            """## Service ownership
+
+Keywords: service, ownership
+
+The worker owns report generation and translation.
+""",
+            encoding="utf-8",
+        )
+
+        self.run_cli(
+            [
+                "replace-entry",
+                "--target",
+                str(self.target),
+                "--file",
+                "knowledge",
+                "--heading",
+                "Service ownership",
+                "--from",
+                str(replacement),
+            ]
+        )
+
+        updated = knowledge_path.read_text(encoding="utf-8")
+        self.assertIn("generation and translation", updated)
+
     def test_replace_entry_rejects_duplicate_exact_headings(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         heuristics_path = self.target / ".agent-policy" / "heuristics.md"
@@ -652,146 +797,6 @@ Second body.
         self.assertEqual(code, 2)
         self.assertIn("occurs 2 times", out)
         self.assertEqual(heuristics_path.read_text(encoding="utf-8"), before)
-
-    def test_brief_reads_legacy_and_sectioned_heuristics(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        heuristics_path = self.target / ".agent-policy" / "heuristics.md"
-        heuristics_path.write_text(
-            """# Heuristics
-
-## Sectioned source guidance
-
-Applies to: document qa
-Keywords: document sources evidence
-Source: user correction
-Status: active
-
-### Heuristic
-
-Ground answers in the source document.
-
-### Search bias
-
-- Retrieve source passages first.
-- Compare claims with evidence.
-
-### Avoids
-
-Unsupported summaries.
-
-## Legacy source guidance
-
-Applies to: document qa
-Keywords: document sources citations
-Source: project discussion
-Heuristic: Preserve source attribution.
-Search bias: Check citations before finalizing.
-Status: active
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "document sources"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Sectioned source guidance", brief)
-        self.assertIn("Ground answers in the source document.", brief)
-        self.assertIn("Retrieve source passages first. Compare claims with evidence.", brief)
-        self.assertIn("Legacy source guidance", brief)
-        self.assertIn("Preserve source attribution.", brief)
-
-    def test_brief_retrieves_heuristic_without_search_bias(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(
-            [
-                "add-heuristic",
-                "--target",
-                str(self.target),
-                "--title",
-                "Preserve document examples",
-                "--heuristic",
-                "Keep concrete document examples when revising structure.",
-            ]
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "revise document examples"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Preserve document examples", brief)
-        self.assertIn("Keep concrete document examples when revising structure.", brief)
-        self.assertNotIn("Additional priority:", brief)
-
-    def test_brief_retrieves_lesson_from_reusable_body(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        lessons_path = self.target / ".agent-policy" / "lessons.md"
-        lessons_path.write_text(
-            """# Lessons
-
-## 2026-06-18 — Preserve evidence
-
-Type: lesson
-Applies to: general
-Keywords:
-Signal: A revision removed useful material.
-Lesson: Source citations and concrete examples must survive structural editing.
-Next time: Compare source citations and examples before finalizing the revision.
-Status: active
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "revise source citations"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Preserve evidence", brief)
-        self.assertIn("Source citations and concrete examples", brief)
-
-    def test_brief_retrieves_playbook_body_but_prefers_metadata_match(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        playbooks_path = self.target / ".agent-policy" / "playbooks.md"
-        playbooks_path.write_text(
-            """# Playbooks
-
-## General revision
-
-Aliases:
-Keywords:
-
-Steps:
-1. Inspect source citations before editing.
-2. Preserve concrete examples.
-
-## Citation review
-
-Aliases: source review
-Keywords: source citations
-
-Steps:
-1. Verify evidence.
-2. Revise the document.
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "review source citations"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Citation review", brief)
-        self.assertNotIn("General revision", brief)
-
-        playbooks_path.write_text(
-            """# Playbooks
-
-## General revision
-
-Aliases:
-Keywords:
-
-Steps:
-1. Inspect source citations before editing.
-2. Preserve concrete examples.
-""",
-            encoding="utf-8",
-        )
-        self.run_cli(["brief", "--target", str(self.target), "review source citations"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("General revision", brief)
 
     def test_add_feedback_without_title_uses_metadata_heading_not_content_slice(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
@@ -872,169 +877,6 @@ Steps:
                 ]
             )
 
-    def test_brief_filters_by_status_and_compact_relevance(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.add_lesson(
-            "code review",
-            "git status, unstaged changes, review scope",
-            "Active code review lesson.",
-            "Start with git status.",
-            "active",
-        )
-        self.add_lesson(
-            "code review",
-            "git status, candidate hint",
-            "Candidate code review hint.",
-            "Maybe inspect candidate scope.",
-            "candidate",
-        )
-        self.add_lesson(
-            "document qa",
-            "source attribution, citations",
-            "Document answers should cite source locations.",
-            "Cite page or section locations.",
-            "active",
-        )
-        (self.target / ".agent-policy" / "playbooks.md").write_text(
-            """# Playbooks
-
-## Code Review
-
-Aliases: review code, review changes, PR review, diff review
-Keywords: git status, staged, unstaged, untracked, tests, risk, review scope
-
-Steps:
-1. Confirm review scope.
-2. Check git status.
-3. Inspect staged changes.
-""",
-            encoding="utf-8",
-        )
-        self.run_cli(
-            [
-                "add-heuristic",
-                "--target",
-                str(self.target),
-                "--title",
-                "Review scope follows git state",
-                "--applies-to",
-                "code review",
-                "--keywords",
-                "git status, unstaged, review scope",
-                "--source",
-                "project discussion",
-                "--heuristic",
-                "Use repository state to decide which code paths and diffs need review.",
-                "--search-bias",
-                "Prioritize git status, staged diffs, unstaged diffs, and relevant untracked files.",
-                "--status",
-                "active",
-            ]
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "code review current changes"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Temporary brief for current task. Refresh before reuse.", brief)
-        self.assertIn("Selection: up to 3-7 relevant items", brief)
-        self.assertIn("Relevant Heuristics", brief)
-        self.assertIn("Review scope follows git state", brief)
-        self.assertIn(
-            "- Review scope follows git state\n"
-            "  Guidance: Use repository state to decide which code paths and diffs need review.",
-            brief,
-        )
-        self.assertIn("  Additional priority: Prioritize git status, staged diffs, unstaged diffs, and relevant untracked files.", brief)
-        self.assertIn("  Layer: project", brief)
-        self.assertNotIn("Review scope follows git state: Use repository state", brief)
-        self.assertIn("Active code review lesson.", brief)
-        self.assertIn("## Project Playbook", brief)
-        self.assertIn("Code Review:", brief)
-        self.assertIn("Layer: project", brief)
-        self.assertNotIn("Candidate code review hint.", brief)
-        self.assertNotIn("Document answers should cite source locations.", brief)
-        self.assertNotIn("# Lessons\n", brief)
-        dynamic_bullet_count = sum(1 for line in brief.splitlines() if line.startswith("- ") and "Current user intent" not in line)
-        self.assertLessEqual(dynamic_bullet_count, 7)
-
-        self.run_cli(["brief", "--target", str(self.target), "code review current changes", "--include-candidate"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Candidate code review hint.", brief)
-        self.assertLess(brief.index("Active code review lesson."), brief.index("Candidate code review hint."))
-
-        self.run_cli(["brief", "--target", str(self.target), "document qa citations"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Document answers should cite source locations.", brief)
-        self.assertNotIn("Active code review lesson.", brief)
-        self.assertEqual(brief.count("Status: active"), 1)
-
-    def test_brief_retrieves_explicit_or_enabled_task_policy_only(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["init", "--global"])
-        task_file = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "code-review.md"
-        task_file.write_text(
-            """# Code Review Task Policy
-
-## Review Scope
-
-Keywords: code review, git status, unstaged
-
-- Always clarify whether unstaged changes are in scope.
-- Prefer explicit final scope summaries.
-""",
-            encoding="utf-8",
-        )
-        trading_file = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
-        trading_file.write_text(
-            """# Trading Review Task Policy
-
-Task ID: trading-review
-Display name: 交易复盘
-Aliases: 交易复盘, 复盘交易, trading journal, post-trade review
-Keywords: market context, sizing, risk
-
-## Risk Plan
-
-Keywords: trading review, sizing, risk
-
-- Review trading risk and sizing.
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "code review git status"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertNotIn("Task Guidance", brief)
-        self.assertNotIn("Review Scope", brief)
-        self.assertNotIn("Risk Plan", brief)
-
-        self.run_cli(["brief", "--target", str(self.target), "code review git status", "--task", "code-review"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Task Guidance", brief)
-        self.assertIn("Review Scope", brief)
-        self.assertIn("unstaged changes", brief)
-        self.assertIn("Task layer(s): `~/.agent-policy/tasks/code-review.md`", brief)
-        self.assertNotIn("Risk Plan", brief)
-        self.assertNotIn("Project Guidance", brief)
-
-        self.run_cli(["setup", "--target", str(self.target), "--task", "code-review"])
-        self.run_cli(["brief", "--target", str(self.target), "code review git status"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Review Scope", brief)
-        self.assertNotIn("Risk Plan", brief)
-
-        self.run_cli(["brief", "--target", str(self.target), "复盘今天这笔交易", "--task", "trading-review"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Risk Plan", brief)
-        self.assertNotIn("Task metadata (trading-review):", brief)
-        self.assertNotIn("Display: 交易复盘", brief)
-        self.assertNotIn("Aliases: 交易复盘", brief)
-        self.assertNotIn("Sections:", brief)
-        self.assertNotIn("Task ID: trading-review", brief)
-        self.assertNotIn("Trading Review Task Policy:", brief)
-
-        with self.assertRaises(SystemExit):
-            main(["brief", "--target", str(self.target), "复盘今天这笔交易", "--task", "交易复盘"])
-
     def test_add_heuristic_task_requires_stable_english_task_id(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         self.run_cli(["init", "--global"])
@@ -1070,11 +912,6 @@ Keywords: trading review, sizing, risk
         self.assertIn("Keywords:", task_text)
         self.assertIn("Status: active", task_text)
 
-        self.run_cli(["brief", "--target", str(self.target), "复盘今天这笔交易", "--task", "trading-review"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("复盘先看交易计划", brief)
-        self.assertIn("Layer: task:trading-review", brief)
-
         with self.assertRaises(SystemExit):
             main(
                 [
@@ -1092,329 +929,6 @@ Keywords: trading review, sizing, risk
                 ]
             )
 
-    def test_explicit_task_layer_active_heuristic_survives_language_mismatch(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["init", "--global"])
-        self.run_cli(
-            [
-                "add-heuristic",
-                "--target",
-                str(self.target),
-                "--task",
-                "document-comparison",
-                "--title",
-                "Compare sources before synthesis",
-                "--applies-to",
-                "document comparison",
-                "--keywords",
-                "document comparison, source evidence, differences",
-                "--source",
-                "user correction",
-                "--heuristic",
-                "Compare source evidence and differences before synthesizing conclusions.",
-                "--search-bias",
-                "Retrieve both documents and align claims by source before writing.",
-                "--status",
-                "active",
-            ]
-        )
-
-        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "document-comparison.md"
-        task_text = task_path.read_text(encoding="utf-8")
-        self.assertIn("Task ID: document-comparison", task_text)
-        self.assertIn("Display name:", task_text)
-        self.assertIn("Aliases:", task_text)
-        self.assertIn("Keywords:", task_text)
-
-        self.run_cli(["brief", "--target", str(self.target), "比较这两份中文文档", "--task", "document-comparison"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Compare sources before synthesis", brief)
-        self.assertIn(
-            "- Compare sources before synthesis\n"
-            "  Guidance: Compare source evidence and differences before synthesizing conclusions.",
-            brief,
-        )
-        self.assertIn("  Additional priority: Retrieve both documents and align claims by source before writing.", brief)
-        self.assertIn("  Layer: task:document-comparison", brief)
-        self.assertNotIn("Search bias:", brief)
-        self.assertNotIn("Status: active", brief)
-        self.assertNotIn("No directly relevant prior experience found.", brief)
-
-    def test_task_query_match_precedes_broader_task_metadata_matches(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "document-comparison.md"
-        task_path.write_text(
-            """# Task Policy: Document Comparison
-
-Task ID: document-comparison
-Display name: 文档比较
-Aliases: 文档比较
-Keywords: source comparison
-
-## General preparation
-
-Applies to: document comparison
-Keywords: preparation
-Source: project discussion
-Status: active
-
-### Heuristic
-
-Prepare the workspace.
-
-## General formatting
-
-Applies to: document comparison
-Keywords: formatting
-Source: project discussion
-Status: active
-
-### Heuristic
-
-Keep formatting readable.
-
-## Verify citations
-
-Applies to: document comparison
-Keywords: citations, evidence
-Source: user correction
-Status: active
-
-### Heuristic
-
-Verify citations against source evidence.
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "check citations", "--task", "document-comparison"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Verify citations", brief)
-        self.assertLess(brief.index("Verify citations"), brief.index("General preparation"))
-        self.assertNotIn("General formatting", brief)
-
-    def test_selected_task_metadata_retrieves_related_project_experience(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
-        task_path.write_text(
-            """# Task Policy: Research Notes
-
-Task ID: research-notes
-Display name: 研究笔记
-Aliases: 研究笔记
-Keywords: sources, evidence, synthesis
-""",
-            encoding="utf-8",
-        )
-        lessons_path = self.target / ".agent-policy" / "lessons.md"
-        lessons_path.write_text(
-            """# Lessons
-
-## Preserve evidence boundaries
-
-Type: lesson
-Applies to: research
-Keywords: sources, evidence
-Signal: Evidence and interpretation were mixed.
-Lesson: Keep source evidence separate from interpretation.
-Next time: Preserve source boundaries during synthesis.
-Status: active
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "整理这份研究笔记", "--task", "research-notes"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Preserve evidence boundaries", brief)
-
-    def test_brief_omits_unmatched_task_heuristic(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
-        task_path.write_text(
-            """# Task Policy: Research Notes
-
-Task ID: research-notes
-Display name:
-Aliases:
-Keywords:
-
-## Unrelated task heuristic
-
-Applies to: deployment
-Keywords: release automation
-Source: project discussion
-Status: active
-
-### Heuristic
-
-Check deployment credentials.
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "整理研究笔记", "--task", "research-notes"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertNotIn("Unrelated task heuristic", brief)
-
-    def test_markdown_code_fences_do_not_split_policy_entries(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        heuristics_path = self.target / ".agent-policy" / "heuristics.md"
-        heuristics_path.write_text(
-            '''# Heuristics
-
-## Preserve Markdown examples
-
-Applies to: documentation
-Keywords: examples
-Source: user correction
-Status: active
-
-### Heuristic
-
-Preserve examples such as:
-
-```markdown
-## Example heading
-### Nested example
-```
-
-Continue preserving the surrounding guidance.
-''',
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "preserve examples"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Preserve Markdown examples", brief)
-        self.assertIn("Continue preserving the surrounding guidance.", brief)
-
-    def test_brief_uses_term_boundaries_instead_of_substring_matches(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        lessons_path = self.target / ".agent-policy" / "lessons.md"
-        lessons_path.write_text(
-            """# Lessons
-
-## User preference
-
-Type: lesson
-Applies to: general
-Keywords:
-Signal: Unrelated signal.
-Lesson: Unrelated lesson.
-Next time: Keep unrelated behavior.
-Status: active
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "use the output"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertNotIn("User preference", brief)
-
-    def test_brief_omits_empty_sections_and_current_md_noise(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["brief", "--target", str(self.target), "unlikelyword task"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertNotIn("Project Guidance", brief)
-        self.assertNotIn("Read `.agent-policy/current.md` before applying this brief", brief)
-        self.assertIn("No directly relevant prior experience found.", brief)
-        self.assertNotIn("No directly relevant items found.", brief)
-        self.assertNotIn("Implementation principle:", brief)
-        self.assertNotIn("## Task Guidance", brief)
-        self.assertNotIn("## User / Global Guidance", brief)
-        self.assertNotIn("Project Playbook", brief)
-        self.assertNotIn("Short task name", brief)
-
-    def test_brief_filters_default_global_profile_and_empty_task_template(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["init", "--global"])
-        self.run_cli(
-            [
-                "add-heuristic",
-                "--target",
-                str(self.target),
-                "--task",
-                "document-analysis",
-                "--title",
-                "Temporary seed",
-                "--heuristic",
-                "Temporary seed heuristic.",
-                "--search-bias",
-                "Temporary seed search bias.",
-            ]
-        )
-        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "document-analysis.md"
-        task_path.write_text(
-            """# Task Policy: Document Analysis
-
-Task ID: document-analysis
-Display name:
-Aliases:
-Keywords:
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "document analysis", "--task", "document-analysis"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertNotIn("Agent Policy Profile", brief)
-        self.assertNotIn("Task Policy: Document Analysis", brief)
-        self.assertNotIn("Display name:", brief)
-        self.assertNotIn("Aliases:", brief)
-        self.assertNotIn("## Task Guidance", brief)
-
-    def test_brief_task_policy_overview_prefers_guidance_field(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "research-notes.md"
-        task_path.write_text(
-            """# Task Policy: Research Notes
-
-Task ID: research-notes
-Display name: 研究笔记
-Aliases: research notes, 研究笔记
-Keywords: sources, notes, synthesis
-Guidance: Preserve source boundaries and separate evidence from interpretation.
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "整理研究笔记", "--task", "research-notes"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Task guidance (research-notes): Guidance: Preserve source boundaries", brief)
-        self.assertNotIn("Task metadata (research-notes):", brief)
-        self.assertNotIn("Task ID: research-notes", brief)
-        self.assertNotIn("Sections:", brief)
-
-    def test_brief_omits_task_metadata_when_no_guidance_sections_exist(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["init", "--global"])
-        task_path = Path(os.environ["AGENT_POLICY_HOME"]) / ".agent-policy" / "tasks" / "trading-review.md"
-        task_path.write_text(
-            """# Task Policy: Trading Review
-
-Task ID: trading-review
-Display name: 交易复盘
-Aliases: 交易复盘, 复盘交易, trading journal
-Keywords: market context, sizing, execution
-""",
-            encoding="utf-8",
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "复盘今天这笔交易", "--task", "trading-review"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertNotIn("## Task Guidance", brief)
-        self.assertNotIn("Task metadata (trading-review):", brief)
-        self.assertNotIn("Display: 交易复盘", brief)
-        self.assertNotIn("Aliases: 交易复盘", brief)
-        self.assertNotIn("Keywords: market context", brief)
-        self.assertNotIn("Task ID: trading-review", brief)
-        self.assertNotIn("Sections:", brief)
-        self.assertNotIn("Task Policy: Trading Review:", brief)
-
     def test_sync_preserves_existing_content_with_marker_blocks(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
         agents = self.target / "AGENTS.md"
@@ -1428,6 +942,9 @@ Keywords: market context, sizing, execution
         self.assertIn("relevant context in the current conversation, not only the latest message", content)
         self.assertIn("A close match identifies where to compare", content)
         self.assertIn("Keep the current experience set accurate and compact", content)
+        self.assertIn("more than one project scope", content)
+        self.assertIn("Store stable descriptive project facts in `knowledge.md`", content)
+        self.assertIn("agent-navi init --target <project-root>", content)
         self.assertIn("replace-entry", content)
 
         self.run_cli(["sync", "--target", str(self.target)])
@@ -1467,6 +984,102 @@ Keywords: market context, sizing, execution
         self.assertIn("compact --apply is not supported yet", out)
         self.assertEqual(before, lessons_path.read_text(encoding="utf-8"))
 
+    def test_compact_reads_legacy_and_sectioned_heuristics(self) -> None:
+        self.run_cli(["init", "--target", str(self.target)])
+        heuristics_path = self.target / ".agent-policy" / "heuristics.md"
+        heuristics_path.write_text(
+            """# Heuristics
+
+## Sectioned source guidance
+
+Applies to: document qa
+Keywords: document sources evidence
+Source: user correction
+Status: active
+
+### Heuristic
+
+Ground answers in the source document.
+
+### Search bias
+
+Retrieve source passages first.
+
+## Legacy source guidance
+
+Applies to: document qa
+Keywords: document sources citations
+Source: project discussion
+Heuristic: Preserve source attribution.
+Search bias: Check citations before finalizing.
+Status: active
+""",
+            encoding="utf-8",
+        )
+
+        self.run_cli(["compact", "--target", str(self.target)])
+
+        compact = (self.target / ".agent-policy" / "heuristics.compact.md").read_text(encoding="utf-8")
+        self.assertIn("Ground answers in the source document.", compact)
+        self.assertIn("Retrieve source passages first.", compact)
+        self.assertIn("Preserve source attribution.", compact)
+        self.assertIn("Check citations before finalizing.", compact)
+
+    def test_compact_ignores_markdown_headings_inside_code_fences(self) -> None:
+        self.run_cli(["init", "--target", str(self.target)])
+        heuristics_path = self.target / ".agent-policy" / "heuristics.md"
+        heuristics_path.write_text(
+            '''# Heuristics
+
+## Preserve Markdown examples
+
+Applies to: documentation
+Keywords: examples
+Source: user correction
+Status: active
+
+### Heuristic
+
+Preserve examples such as:
+
+```markdown
+## Example heading
+### Nested example
+```
+
+Continue preserving the surrounding guidance.
+''',
+            encoding="utf-8",
+        )
+
+        self.run_cli(["compact", "--target", str(self.target)])
+
+        compact = (self.target / ".agent-policy" / "heuristics.compact.md").read_text(encoding="utf-8")
+        self.assertIn("Continue preserving the surrounding guidance.", compact)
+
+    def test_compact_preserves_multiline_lesson_fields(self) -> None:
+        self.run_cli(["init", "--target", str(self.target)])
+        self.run_cli(
+            [
+                "add-feedback",
+                "--target",
+                str(self.target),
+                "--title",
+                "Wrapped lesson",
+                "--signal",
+                "signal",
+                "--lesson",
+                "First line.\nSecondword remains available.",
+                "--next-time",
+                "Apply both lines.",
+            ]
+        )
+
+        self.run_cli(["compact", "--target", str(self.target)])
+
+        compact = (self.target / ".agent-policy" / "lessons.compact.md").read_text(encoding="utf-8")
+        self.assertIn("First line. Secondword remains available.", compact)
+
     def test_checks_print_lightweight_reminders(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])
 
@@ -1490,6 +1103,8 @@ Keywords: market context, sizing, execution
             main(["add-feedback", "--target", str(self.target), "--signal", "ok"])
         with self.assertRaises(SystemExit):
             main(["propose", "--target", str(self.target)])
+        with self.assertRaises(SystemExit):
+            main(["brief", "--target", str(self.target), "code review"])
 
     def test_init_refuses_to_follow_adapter_symlink(self) -> None:
         repo = self.target / "repo"
@@ -1598,96 +1213,6 @@ Keywords: market context, sizing, execution
         imported = list((repo / ".agent-policy" / "imports" / "raw").glob("*.md"))
         self.assertEqual(len(imported), 1)
         self.assertEqual(imported[0].read_text(encoding="utf-8"), "target source\n")
-
-    def test_project_heuristic_priority_survives_brief_cap(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["setup", "--target", str(self.target), "--task", "code-review"])
-        self.run_cli(
-            [
-                "add-heuristic",
-                "--target",
-                str(self.target),
-                "--title",
-                "Project scope",
-                "--applies-to",
-                "code review",
-                "--keywords",
-                "project-scope",
-                "--heuristic",
-                "Project guidance must remain visible.",
-            ]
-        )
-        for suffix in ("one", "two"):
-            self.run_cli(
-                [
-                    "add-heuristic",
-                    "--target",
-                    str(self.target),
-                    "--global",
-                    "--title",
-                    f"User {suffix}",
-                    "--keywords",
-                    "needle",
-                    "--heuristic",
-                    f"User guidance {suffix}.",
-                ]
-            )
-
-        self.run_cli(["brief", "--target", str(self.target), "needle"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Project scope", brief)
-        self.assertIn("Layer: project", brief)
-        self.assertEqual(sum(name in brief for name in ("User one", "User two")), 1)
-
-    def test_multiline_lesson_fields_remain_searchable(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(
-            [
-                "add-feedback",
-                "--target",
-                str(self.target),
-                "--title",
-                "Wrapped lesson",
-                "--signal",
-                "signal",
-                "--lesson",
-                "First line.\nSecondword remains searchable.",
-                "--next-time",
-                "Apply both lines.",
-            ]
-        )
-
-        self.run_cli(["brief", "--target", str(self.target), "secondword"])
-        brief = (self.target / ".agent-policy" / "brief.md").read_text(encoding="utf-8")
-        self.assertIn("Wrapped lesson", brief)
-        self.assertIn("First line. Secondword remains searchable.", brief)
-
-    def test_brief_refuses_to_overwrite_git_tracked_private_file(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        subprocess.run(["git", "init", "-q"], cwd=self.target, check=True)
-        brief_path = self.target / ".agent-policy" / "brief.md"
-        brief_path.write_text("tracked placeholder\n", encoding="utf-8")
-        subprocess.run(
-            ["git", "add", "-f", ".agent-policy/brief.md"],
-            cwd=self.target,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-
-        code, output = self.run_cli_with_code(["brief", "--target", str(self.target), "code review"])
-        self.assertEqual(code, 2)
-        self.assertIn("Git already tracks it", output)
-        self.assertEqual(brief_path.read_text(encoding="utf-8"), "tracked placeholder\n")
-
-    def test_brief_is_private_and_warns_against_sharing(self) -> None:
-        self.run_cli(["init", "--target", str(self.target)])
-        self.run_cli(["brief", "--target", str(self.target), "unmatched task"])
-        brief_path = self.target / ".agent-policy" / "brief.md"
-        brief = brief_path.read_text(encoding="utf-8")
-        self.assertIn("Do not commit or share this file", brief)
-        if os.name != "nt":
-            self.assertEqual(stat.S_IMODE(brief_path.stat().st_mode), 0o600)
 
     def test_heuristic_destination_flags_are_mutually_exclusive(self) -> None:
         self.run_cli(["init", "--target", str(self.target)])

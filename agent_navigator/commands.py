@@ -54,11 +54,21 @@ BASE_GITIGNORE_LINES = [
     "",
 ]
 AGENT_NAVIGATOR_GITIGNORE_LINES = [
+    "# Local Agent Navigator experience and generated agent adapters",
+    ".agent-policy/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".kiro/steering/agent-policy.md",
+]
+LEGACY_AGENT_NAVIGATOR_GITIGNORE_LINES = [
     "# Generated temporary Agent Navigator files",
     ".agent-policy/brief.md",
     ".agent-policy/lessons.compact.md",
     ".agent-policy/heuristics.compact.md",
     ".agent-policy/local.md",
+]
+AGENT_NAVIGATOR_GIT_PATHS = [
+    ".agent-policy",
     "AGENTS.md",
     "CLAUDE.md",
     ".kiro/steering/agent-policy.md",
@@ -66,6 +76,7 @@ AGENT_NAVIGATOR_GITIGNORE_LINES = [
 GITIGNORE_LINES = BASE_GITIGNORE_LINES + AGENT_NAVIGATOR_GITIGNORE_LINES
 LEGACY_AGENT_GUIDANCE_NAMES = {"agent.md"}
 REPLACEABLE_ENTRY_FILES = {
+    "knowledge": "knowledge.md",
     "lessons": "lessons.md",
     "heuristics": "heuristics.md",
     "playbooks": "playbooks.md",
@@ -94,6 +105,14 @@ INLINE_FIELD_NAMES = {
 class CommandResult:
     message: str
     code: int = 0
+
+
+CURRENT_KNOWLEDGE_MIGRATION_NOTICE = """Created .agent-policy/knowledge.md and preserved the existing current.md.
+
+If current.md mixes project guidance with facts, workflows, history, or logs, ask an agent to review and redistribute its contents by meaning.
+
+Suggested agent task:
+Review .agent-policy/current.md incrementally. Keep compact project guidance and enabled task layers in current.md; move stable project facts to knowledge.md, ordered workflows to playbooks.md, reusable experience to lessons.md or heuristics.md, and uncertain signals to inbox.md. Do not preserve one-off logs or temporary task state as long-term Policy. Update destination files first, verify the result, then remove migrated content from current.md. Preserve identifiers exactly and report anything that remains uncertain."""
 
 
 @dataclass
@@ -125,41 +144,6 @@ class HeuristicEntry:
     layer: str = "project"
 
 
-@dataclass
-class PlaybookEntry:
-    title: str
-    aliases: str
-    keywords: str
-    body: str
-    order: int
-
-
-@dataclass
-class PolicyEntry:
-    title: str
-    keywords: str
-    body: str
-    order: int
-    layer: str
-
-
-@dataclass
-class BriefItem:
-    kind: str
-    title: str
-    text: str
-    match_level: str
-    order: int
-    layer: str = "project"
-    status: str = "active"
-
-
-@dataclass
-class RetrievalContext:
-    query_terms: set[str]
-    task_terms: set[str]
-
-
 def init_policy(
     target: str = ".",
     force: bool = False,
@@ -172,6 +156,8 @@ def init_policy(
 
     repo = resolve_target(target)
     root = repo / ".agent-policy"
+    current_existed = (root / "current.md").exists()
+    knowledge_existed = (root / "knowledge.md").exists()
     repo.mkdir(parents=True, exist_ok=True)
     created: list[str] = []
     skipped: list[str] = []
@@ -210,6 +196,8 @@ def init_policy(
     if skipped:
         lines.append("Skipped:")
         lines.extend(f"- {item}" for item in skipped)
+    if current_existed and not knowledge_existed and ".agent-policy/knowledge.md" in created:
+        lines.append(CURRENT_KNOWLEDGE_MIGRATION_NOTICE)
     if updated_legacy:
         lines.append("Updated generated legacy agent guidance:")
         lines.extend(f"- {item}" for item in updated_legacy)
@@ -223,6 +211,10 @@ def init_policy(
         setup_message = interactive_project_setup(root)
         if setup_message:
             lines.append(setup_message)
+    if add_ignore:
+        warning = tracked_agent_navigator_warning(repo)
+        if warning:
+            lines.append(warning)
     return CommandResult("\n".join(lines))
 
 
@@ -293,7 +285,7 @@ def record_legacy_agent_migration(root: Path, filename: str) -> bool:
             source_marker,
             "Signal: Existing root-level agent guidance was found during init.",
             "Lesson: Treat custom legacy agent guidance as a source to migrate, not content to overwrite automatically.",
-            "Next time: Read the legacy file, promote stable reusable guidance into `.agent-policy/current.md`, `heuristics.md`, `lessons.md`, or `playbooks.md`, and keep or remove the legacy file only after user confirmation.",
+            "Next time: Read the legacy file, promote stable reusable content into `.agent-policy/current.md`, `knowledge.md`, `heuristics.md`, `lessons.md`, or `playbooks.md`, and keep or remove the legacy file only after user confirmation.",
             "Status: candidate",
         ]
     )
@@ -343,7 +335,7 @@ def setup_task_layers(target: str, tasks: list[str], display: str = "") -> Comma
             elif task_id not in merged:
                 merged[task_id] = ""
         section_lines = [
-            "These task layers are selected during retrieval/brief generation. They are not copied into the project.",
+            "These task layers are selected during retrieval. They are not copied into the project.",
             "",
         ]
         for slug, display_name in merged.items():
@@ -597,76 +589,6 @@ def import_sources(
     note = render_import_note(root, imported, applies_to)
     append_text(root / "inbox.md", note, root=root)
     return CommandResult(f"Imported {len(imported)} file(s) into .agent-policy/imports/raw")
-
-
-def brief_task(target: str, task: str, include_candidate: bool = False, task_layer: str = "") -> CommandResult:
-    root = require_policy(target)
-    destination = root / "brief.md"
-    tracking_status = git_tracking_status(root.parent, destination)
-    if tracking_status is not False:
-        reason = "Git already tracks it" if tracking_status else "its Git tracking status could not be verified"
-        action = "untrack the file first" if tracking_status else "verify that the destination is untracked first"
-        return CommandResult(
-            f"Refusing to write .agent-policy/brief.md because {reason}. "
-            f"The brief may contain selected private user/task guidance; {action}.",
-            code=2,
-        )
-    task_layers = selected_task_layers(root, task_layer)
-    query_terms = keywords_for(task)
-    task_terms: set[str] = set()
-    global_root = global_policy_root()
-    task_documents: list[tuple[str, str]] = []
-    for task_slug in task_layers:
-        task_terms.add(task_slug)
-        task_terms.add(task_slug.replace("-", " "))
-        task_file = global_root / "tasks" / f"{task_slug}.md"
-        if not task_file.exists():
-            continue
-        task_text = read_optional(task_file)
-        task_terms.update(task_metadata_terms(task_text))
-        task_documents.append((task_slug, task_text))
-    context = RetrievalContext(query_terms=query_terms, task_terms=task_terms)
-
-    user_guidance = select_policy_items(
-        parse_policy_entries(read_optional(global_root / "profile.md"), layer="user"),
-        context,
-        kind="user",
-    )
-    task_guidance: list[BriefItem] = []
-    task_heuristics: list[BriefItem] = []
-    for task_slug, task_text in task_documents:
-        task_policy_items = select_task_policy_items(parse_policy_entries(task_text, layer=f"task:{task_slug}"), context)
-        task_heuristic_items = select_heuristic_items(
-            parse_heuristic_entries(task_text, layer=f"task:{task_slug}"),
-            context,
-            include_candidate,
-        )
-        task_overview = task_policy_overview_item(task_text, task_slug)
-        if task_overview and (task_overview.title == "Task guidance" or (not task_policy_items and not task_heuristic_items)):
-            task_guidance.append(task_overview)
-        task_guidance.extend(task_policy_items)
-        task_heuristics.extend(task_heuristic_items)
-
-    heuristic_items = sorted(
-        select_heuristic_items(parse_heuristic_entries(read_optional(root / "heuristics.md"), layer="project"), context, include_candidate)
-        + task_heuristics
-        + select_heuristic_items(parse_heuristic_entries(read_optional(global_root / "heuristics.md"), layer="user"), context, include_candidate),
-        key=brief_item_sort_key,
-    )
-    lesson_items = select_lesson_items(parse_lesson_entries(read_optional(root / "lessons.md")), context, include_candidate)
-    playbook_items = select_playbook_items(parse_playbook_entries(read_optional(root / "playbooks.md")), context)
-
-    selected = limit_brief_sections(
-        user_guidance=user_guidance,
-        task_guidance=sorted(task_guidance, key=brief_item_sort_key),
-        heuristics=heuristic_items,
-        lessons=lesson_items,
-        playbooks=playbook_items,
-    )
-    content = render_brief(task, selected, task_layers)
-    write_text(destination, content, force=True, root=root, mode=0o600)
-    count = sum(len(items) for items in selected.values())
-    return CommandResult(f"Wrote temporary .agent-policy/brief.md with {count} relevant item(s)")
 
 
 def compact_lessons(target: str, apply: bool = False) -> CommandResult:
@@ -1040,207 +962,6 @@ Files:
 """
 
 
-def select_lesson_items(
-    entries: list[LessonEntry],
-    context: RetrievalContext,
-    include_candidate: bool,
-) -> list[BriefItem]:
-    items: list[BriefItem] = []
-    for entry in entries:
-        if entry.status == "candidate" and not include_candidate:
-            continue
-        if entry.status not in {"active", "candidate"}:
-            continue
-        match_level = match_level_for_fields(
-            context,
-            metadata_fields=[entry.heading, entry.keywords, entry.applies_to],
-            body_fields=[entry.lesson, entry.next_time, entry.signal],
-        )
-        if match_level is None:
-            continue
-        text = concise_join(
-            [
-                f"{entry.heading}:",
-                entry.lesson,
-                f"Next time: {entry.next_time}" if entry.next_time and entry.next_time != "TBD" else "",
-                f"Status: {entry.status}",
-            ]
-        )
-        items.append(BriefItem("lesson", entry.heading, text, match_level, entry.order, status=entry.status))
-    return sorted(items, key=brief_item_sort_key)
-
-
-def select_heuristic_items(
-    entries: list[HeuristicEntry],
-    context: RetrievalContext,
-    include_candidate: bool,
-) -> list[BriefItem]:
-    items: list[BriefItem] = []
-    for entry in entries:
-        if entry.status == "candidate" and not include_candidate:
-            continue
-        if entry.status not in HEURISTIC_STATUSES:
-            continue
-        match_level = match_level_for_fields(
-            context,
-            metadata_fields=[entry.heading, entry.keywords, entry.applies_to],
-            body_fields=[entry.heuristic, entry.search_bias, entry.avoids],
-        )
-        if match_level is None:
-            continue
-        text_lines = [
-            entry.heading,
-            f"  Guidance: {entry.heuristic}",
-        ]
-        if entry.search_bias:
-            text_lines.append(f"  Additional priority: {entry.search_bias}")
-        if entry.avoids:
-            text_lines.append(f"  Avoid: {entry.avoids}")
-        text_lines.append(f"  Layer: {entry.layer}")
-        if entry.status != "active":
-            text_lines.append(f"  Status: {entry.status}")
-        text = "\n".join(text_lines)
-        item = BriefItem(
-            "heuristic",
-            entry.heading,
-            text,
-            match_level,
-            entry.order,
-            layer=entry.layer,
-            status=entry.status,
-        )
-        items.append(item)
-    return sorted(items, key=brief_item_sort_key)
-
-
-def select_policy_items(entries: list[PolicyEntry], context: RetrievalContext, kind: str) -> list[BriefItem]:
-    items: list[BriefItem] = []
-    for entry in entries:
-        match_level = match_level_for_fields(
-            context,
-            metadata_fields=[entry.title, entry.keywords],
-            body_fields=[entry.body],
-        )
-        if match_level is None:
-            continue
-        summary = first_steps_summary(entry.body)
-        text = concise_join([f"{entry.title}:", summary, f"Layer: {entry.layer}"])
-        items.append(BriefItem(kind, entry.title, text, match_level, entry.order, layer=entry.layer))
-    return sorted(items, key=brief_item_sort_key)
-
-
-def select_task_policy_items(entries: list[PolicyEntry], context: RetrievalContext) -> list[BriefItem]:
-    items: list[BriefItem] = []
-    for entry in entries:
-        match_level = match_level_for_fields(
-            context,
-            metadata_fields=[entry.title, entry.keywords],
-            body_fields=[entry.body],
-        )
-        if match_level is None:
-            continue
-        summary = first_steps_summary(entry.body)
-        text = concise_join([f"{entry.title}:", summary, f"Layer: {entry.layer}"])
-        items.append(BriefItem("task", entry.title, text, match_level, entry.order, layer=entry.layer))
-    return sorted(items, key=brief_item_sort_key)
-
-
-def select_playbook_items(entries: list[PlaybookEntry], context: RetrievalContext) -> list[BriefItem]:
-    items: list[BriefItem] = []
-    for entry in entries:
-        match_level = match_level_for_fields(
-            context,
-            metadata_fields=[entry.title, entry.keywords, entry.aliases],
-            body_fields=[entry.body],
-        )
-        if match_level is None:
-            continue
-        note = first_steps_summary(entry.body)
-        text = concise_join([f"{entry.title}:", note, "Layer: project"])
-        items.append(BriefItem("playbook", entry.title, text, match_level, entry.order))
-    return sorted(items, key=brief_item_sort_key)
-
-
-def limit_brief_sections(
-    user_guidance: list[BriefItem],
-    task_guidance: list[BriefItem],
-    heuristics: list[BriefItem],
-    lessons: list[BriefItem],
-    playbooks: list[BriefItem],
-) -> dict[str, list[BriefItem]]:
-    section_caps = {
-        "task_guidance": 1,
-        "user_guidance": 1,
-        "heuristics": 2,
-        "lessons": 2,
-        "playbooks": 1,
-    }
-    source = {
-        "task_guidance": task_guidance,
-        "user_guidance": user_guidance,
-        "heuristics": heuristics,
-        "lessons": lessons,
-        "playbooks": playbooks,
-    }
-    selected: dict[str, list[BriefItem]] = {}
-    remaining = 7
-    for key in ["playbooks", "task_guidance", "user_guidance", "heuristics", "lessons"]:
-        if remaining <= 0:
-            selected[key] = []
-            continue
-        take = min(section_caps[key], remaining)
-        selected[key] = source[key][:take]
-        remaining -= len(selected[key])
-    return selected
-
-
-def render_brief(task: str, sections: dict[str, list[BriefItem]], task_layers: list[str] | None = None) -> str:
-    lines = [
-        "# Agent Policy Brief",
-        "",
-        "Temporary brief for current task. Refresh before reuse.",
-        "May contain selected private user/task guidance. Do not commit or share this file.",
-        "",
-        f"Task: {task}",
-    ]
-    if task_layers:
-        joined_layers = ", ".join(f"`~/.agent-policy/tasks/{slug}.md`" for slug in task_layers)
-        lines.append(f"Task layer(s): {joined_layers}")
-    lines.extend(
-        [
-            f"Generated: {now_human()}",
-            "Selection: up to 3-7 relevant items when enough relevant items exist; no filler items.",
-            "",
-        ]
-    )
-    section_titles = [
-        ("playbooks", "Project Playbook"),
-        ("task_guidance", "Task Guidance"),
-        ("user_guidance", "User / Global Guidance"),
-        ("heuristics", "Relevant Heuristics"),
-        ("lessons", "Relevant Lessons"),
-    ]
-    emitted_dynamic_section = False
-    for key, title in section_titles:
-        items = sections.get(key, [])
-        if not items:
-            continue
-        emitted_dynamic_section = True
-        lines.extend([f"## {title}", ""])
-        lines.extend(f"- {item.text}" for item in items)
-        lines.append("")
-    if not emitted_dynamic_section:
-        lines.extend(["No directly relevant prior experience found.", ""])
-    lines.extend(
-        [
-            "## Reminder",
-            "",
-            "- Current user intent overrides prior heuristics unless safety, data integrity, or explicit project rules are involved.",
-        ]
-    )
-    return "\n".join(lines)
-
-
 def parse_lesson_entries(text: str) -> list[LessonEntry]:
     entries: list[LessonEntry] = []
     for index, (heading, raw) in enumerate(markdown_h2_entries(text)):
@@ -1280,95 +1001,6 @@ def parse_heuristic_entries(text: str, layer: str) -> list[HeuristicEntry]:
         if entry.heuristic and entry.status in HEURISTIC_STATUSES:
             entries.append(entry)
     return entries
-
-
-def parse_policy_entries(text: str, layer: str) -> list[PolicyEntry]:
-    h2_entries = markdown_h2_entries(text)
-    if text.strip() and not h2_entries:
-        raw = text.strip()
-        if field_or_subsection_value(raw, "Heuristic") or field_value(raw, "Task ID") or is_default_profile_template(raw) or is_empty_task_policy_template(raw):
-            return []
-        return [
-            PolicyEntry(
-                title=markdown_title(raw) or f"{layer} guidance",
-                keywords=field_value(raw, "Keywords"),
-                body=raw,
-                order=0,
-                layer=layer,
-            )
-        ]
-
-    entries: list[PolicyEntry] = []
-    for index, (title, raw) in enumerate(h2_entries):
-        if field_or_subsection_value(raw, "Heuristic") or field_value(raw, "Task ID") or is_default_profile_template(raw) or is_empty_task_policy_template(raw):
-            continue
-        entries.append(
-            PolicyEntry(
-                title=title,
-                keywords=field_value(raw, "Keywords"),
-                body=raw,
-                order=index,
-                layer=layer,
-            )
-        )
-    return entries
-
-
-def task_policy_overview_item(text: str, task_id: str) -> BriefItem | None:
-    if is_empty_task_policy_template(text):
-        return None
-    guidance = field_value(text, "Guidance") or field_value(text, "Summary")
-    if not guidance:
-        return None
-    return BriefItem(
-        "task",
-        "Task guidance",
-        concise_join([f"Task guidance ({task_id}):", f"Guidance: {guidance}"]),
-        match_level="task-metadata",
-        order=-100,
-        layer=f"task:{task_id}",
-    )
-
-
-def is_default_profile_template(text: str) -> bool:
-    normalized = "\n".join(line.strip() for line in text.strip().splitlines() if line.strip())
-    return normalized == "\n".join(
-        [
-            "# Agent Policy Profile",
-            "Long-lived user preferences, working habits, and cross-project guidance.",
-            "Keep this private unless the user explicitly decides otherwise.",
-        ]
-    )
-
-
-def is_empty_task_policy_template(text: str) -> bool:
-    stripped = text.strip()
-    if re.search(r"(?m)^##\s+", stripped):
-        return False
-    if not field_value(stripped, "Task ID"):
-        return False
-    meaningful_fields = [
-        field_value(stripped, "Display name"),
-        field_value(stripped, "Aliases"),
-        field_value(stripped, "Keywords"),
-    ]
-    if any(meaningful_fields):
-        return False
-    lines = [line.strip() for line in stripped.splitlines() if line.strip()]
-    allowed_prefixes = ("# Task Policy:", "Task ID:", "Display name:", "Aliases:", "Keywords:")
-    return all(line.startswith(allowed_prefixes) for line in lines)
-
-
-def selected_task_layers(root: Path, task_layer: str = "") -> list[str]:
-    if task_layer and task_layer.strip():
-        task_id = normalize_task_id(task_layer)
-        validate_task_id(task_id)
-        return [task_id]
-    return [slug for slug, _display in enabled_task_layers(root)]
-
-
-def enabled_task_layers(root: Path) -> list[tuple[str, str]]:
-    return enabled_task_layers_from_text(read_optional(root / "current.md"))
 
 
 def enabled_task_layers_from_text(text: str) -> list[tuple[str, str]]:
@@ -1485,116 +1117,6 @@ def replace_markdown_section(text: str, title: str, body_lines: list[str]) -> st
     return existing + separator + replacement
 
 
-def markdown_title(text: str) -> str:
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            return stripped.lstrip("#").strip()
-    return ""
-
-
-def parse_playbook_entries(text: str) -> list[PlaybookEntry]:
-    entries: list[PlaybookEntry] = []
-    for index, (title, raw) in enumerate(markdown_h2_entries(text)):
-        if is_placeholder_playbook(title, raw):
-            continue
-        entries.append(
-            PlaybookEntry(
-                title=title,
-                aliases=field_value(raw, "Aliases"),
-                keywords=field_value(raw, "Keywords"),
-                body=raw,
-                order=index,
-            )
-        )
-    return entries
-
-
-def is_placeholder_playbook(title: str, raw: str) -> bool:
-    return title == "Short task name" and "1. ..." in raw and "2. ..." in raw
-
-
-def first_steps_summary(body: str) -> str:
-    step_lines = [line.strip() for line in body.splitlines() if re.match(r"^\d+\.\s+", line.strip())]
-    if step_lines:
-        return " ".join(step_lines[:3])
-    bullet_lines = [line[2:].strip() for line in body.splitlines() if line.strip().startswith("- ")]
-    if bullet_lines:
-        return " ".join(bullet_lines[:3])
-    return first_non_heading_line(body)
-
-
-def keywords_for(task: str) -> set[str]:
-    words = set(re.findall(r"[a-z0-9][a-z0-9_-]{2,}", task.lower()))
-    return words
-
-
-def task_metadata_terms(text: str) -> set[str]:
-    terms: set[str] = set()
-    for field in ("Task ID", "Display name", "Aliases", "Keywords"):
-        value = field_value(text, field)
-        if not value:
-            continue
-        for item in re.split(r"[,;]", value):
-            normalized = normalize_search_text(item)
-            if normalized:
-                terms.add(normalized)
-        terms.update(keywords_for(value))
-    return terms
-
-
-def match_level_for_fields(
-    context: RetrievalContext,
-    metadata_fields: list[str],
-    body_fields: list[str],
-) -> str | None:
-    if fields_match_terms(metadata_fields, context.query_terms):
-        return "query-metadata"
-    if fields_match_terms(body_fields, context.query_terms):
-        return "query-body"
-    if fields_match_terms(metadata_fields, context.task_terms):
-        return "task-metadata"
-    if fields_match_terms(body_fields, context.task_terms):
-        return "task-body"
-    return None
-
-
-def fields_match_terms(fields: list[str], terms: set[str]) -> bool:
-    return any(term_matches_field(term, field) for term in terms for field in fields if field)
-
-
-def term_matches_field(term: str, field: str) -> bool:
-    normalized_term = normalize_search_text(term)
-    normalized_field = normalize_search_text(field)
-    if not normalized_term or not normalized_field:
-        return False
-    if re.search(r"[a-z0-9]", normalized_term):
-        pattern = rf"(?<![a-z0-9]){re.escape(normalized_term)}(?![a-z0-9])"
-        return bool(re.search(pattern, normalized_field))
-    return normalized_term in normalized_field
-
-
-def normalize_search_text(value: str) -> str:
-    return " ".join(value.lower().replace("-", " ").replace("_", " ").split())
-
-
-def brief_item_sort_key(item: BriefItem) -> tuple[int, int, int, int]:
-    match_order = {
-        "query-metadata": 0,
-        "query-body": 1,
-        "task-metadata": 2,
-        "task-body": 3,
-    }
-    if item.layer == "project":
-        layer_order = 0
-    elif item.layer.startswith("task:"):
-        layer_order = 1
-    else:
-        layer_order = 2
-    status_order = 0 if item.status == "active" else 1
-    return (layer_order, match_order[item.match_level], status_order, item.order)
-
-
 def field_value(entry: str, field: str) -> str:
     lines = entry.splitlines()
     pattern = re.compile(rf"^{re.escape(field)}:[ \t]*(.*)$")
@@ -1655,25 +1177,6 @@ def concise_join(parts: list[str]) -> str:
 
 def read_optional(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else ""
-
-
-def git_tracking_status(repo: Path, path: Path) -> bool | None:
-    try:
-        relative = path.relative_to(repo)
-        completed = subprocess.run(
-            ["git", "ls-files", "--error-unmatch", "--", str(relative)],
-            cwd=repo,
-            text=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-            timeout=5,
-        )
-    except ValueError:
-        return False
-    except (OSError, subprocess.TimeoutExpired):
-        return None if any((parent / ".git").exists() for parent in (repo, *repo.parents)) else False
-    return completed.returncode == 0
 
 
 def resolve_input_file(target: str, value: str) -> Path:
@@ -1833,13 +1336,20 @@ def ensure_gitignore(repo: Path) -> str:
         if not existing:
             changed = True
             return "\n".join(GITIGNORE_LINES)
-        current_lines = set(existing.splitlines())
+        lines = existing.splitlines()
+        filtered = [line for line in lines if line not in LEGACY_AGENT_NAVIGATOR_GITIGNORE_LINES]
+        if filtered != lines:
+            changed = True
+        current_lines = set(filtered)
         missing = [line for line in GITIGNORE_LINES if line and line not in current_lines]
         if not missing:
-            return existing
+            result = "\n".join(filtered).rstrip()
+            return result + "\n" if result else ""
         changed = True
-        addition = "\n\n# Agent Navigator\n" + "\n".join(missing) + "\n"
-        return existing.rstrip() + addition
+        existing_text = "\n".join(filtered).rstrip()
+        separator = "\n\n" if existing_text else ""
+        addition = "# Agent Navigator\n" + "\n".join(missing) + "\n"
+        return existing_text + separator + addition
 
     update_text(path, merge, root=repo)
     return ".gitignore" if changed else ""
@@ -1850,6 +1360,9 @@ def manage_agent_navigator_ignore(target: str, action: str) -> CommandResult:
     if action == "add":
         changed = ensure_agent_navigator_ignore(repo)
         message = "Added Agent Navigator ignore rules to .gitignore" if changed else "Agent Navigator ignore rules are already present"
+        warning = tracked_agent_navigator_warning(repo)
+        if warning:
+            message += "\n" + warning
         return CommandResult(message)
     if action == "remove":
         changed = remove_agent_navigator_ignore(repo)
@@ -1864,14 +1377,20 @@ def ensure_agent_navigator_ignore(repo: Path) -> bool:
 
     def merge(existing: str) -> str:
         nonlocal changed
-        current_lines = set(existing.splitlines())
+        lines = existing.splitlines()
+        filtered = [line for line in lines if line not in LEGACY_AGENT_NAVIGATOR_GITIGNORE_LINES]
+        if filtered != lines:
+            changed = True
+        current_lines = set(filtered)
         missing = [line for line in AGENT_NAVIGATOR_GITIGNORE_LINES if line and line not in current_lines]
         if not missing:
-            return existing
+            result = "\n".join(filtered).rstrip()
+            return result + "\n" if result else ""
         changed = True
         addition = "\n".join(missing)
-        separator = "\n\n" if existing.strip() else ""
-        return existing.rstrip() + separator + addition + "\n"
+        existing_text = "\n".join(filtered).rstrip()
+        separator = "\n\n" if existing_text else ""
+        return existing_text + separator + addition + "\n"
 
     update_text(path, merge, root=repo)
     return changed
@@ -1881,7 +1400,7 @@ def remove_agent_navigator_ignore(repo: Path) -> bool:
     path = repo / ".gitignore"
     if not path.exists():
         return False
-    managed_lines = set(AGENT_NAVIGATOR_GITIGNORE_LINES)
+    managed_lines = set(AGENT_NAVIGATOR_GITIGNORE_LINES + LEGACY_AGENT_NAVIGATOR_GITIGNORE_LINES)
     changed = False
 
     def merge(existing: str) -> str:
@@ -1896,3 +1415,42 @@ def remove_agent_navigator_ignore(repo: Path) -> bool:
 
     update_text(path, merge, root=repo)
     return changed
+
+
+def tracked_agent_navigator_paths(repo: Path) -> list[str]:
+    try:
+        completed = subprocess.run(
+            ["git", "ls-files", "-z", "--", *AGENT_NAVIGATOR_GIT_PATHS],
+            cwd=repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    if completed.returncode != 0:
+        return []
+    return [item.decode("utf-8", errors="replace") for item in completed.stdout.split(b"\0") if item]
+
+
+def tracked_agent_navigator_warning(repo: Path) -> str:
+    tracked = tracked_agent_navigator_paths(repo)
+    if not tracked:
+        return ""
+    preview = tracked[:8]
+    lines = [
+        "WARNING: Git already tracks Agent Navigator files; .gitignore does not untrack existing files.",
+        "Tracked paths:",
+        *(f"- {path}" for path in preview),
+    ]
+    if len(tracked) > len(preview):
+        lines.append(f"- ... and {len(tracked) - len(preview)} more")
+    lines.extend(
+        [
+            "Keep the local files while removing them from Git's index with:",
+            "git rm -r --cached --ignore-unmatch -- .agent-policy AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md",
+            "Then review and commit the index changes.",
+        ]
+    )
+    return "\n".join(lines)

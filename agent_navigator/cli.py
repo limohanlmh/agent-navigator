@@ -7,7 +7,6 @@ from pathlib import Path
 from .commands import (
     add_feedback,
     add_heuristic,
-    brief_task,
     check_code_review,
     check_document_qa,
     check_trading_review,
@@ -78,7 +77,7 @@ def build_parser(prog: str = "agent-navi") -> argparse.ArgumentParser:
 
     replace = sub.add_parser("replace-entry", help="Replace one exact Markdown entry without semantic matching")
     add_target(replace)
-    replace.add_argument("--file", dest="entry_file", required=True, choices=["lessons", "heuristics", "playbooks"])
+    replace.add_argument("--file", dest="entry_file", required=True, choices=["knowledge", "lessons", "heuristics", "playbooks"])
     replace.add_argument("--heading", required=True, help="Exact Markdown level-two heading text, without `##`")
     replace.add_argument("--from", dest="source", required=True, help="File containing exactly one replacement `##` entry")
     replace.add_argument("--dry-run", action="store_true", help="Print a unified diff without writing")
@@ -87,12 +86,6 @@ def build_parser(prog: str = "agent-navi") -> argparse.ArgumentParser:
     add_target(import_cmd)
     import_cmd.add_argument("paths", nargs="+")
     import_cmd.add_argument("--applies-to", default="general")
-
-    brief = sub.add_parser("brief", help="Generate a compact task-specific policy brief")
-    add_target(brief)
-    brief.add_argument("task")
-    brief.add_argument("--task", dest="task_layer", default="", help="Explicit stable English task id from ~/.agent-policy/tasks/<task-id>.md")
-    brief.add_argument("--include-candidate", action="store_true")
 
     compact = sub.add_parser("compact", help="Create a deterministic lessons.compact.md draft")
     add_target(compact)
@@ -174,8 +167,6 @@ def main(argv: list[str] | None = None) -> int:
         )
     elif args.command == "import":
         result = import_sources(args.target, args.paths, args.applies_to)
-    elif args.command == "brief":
-        result = brief_task(args.target, args.task, args.include_candidate, task_layer=args.task_layer)
     elif args.command == "compact":
         result = compact_lessons(args.target, args.apply)
     elif args.command == "sync":

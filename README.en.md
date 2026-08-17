@@ -117,6 +117,7 @@ Initialization creates the project experience layer:
 ```text
 .agent-policy/
   current.md
+  knowledge.md
   lessons.md
   heuristics.md
   playbooks.md
@@ -162,8 +163,9 @@ File-discovery behavior varies across agents, versions, and execution modes. If 
 
 ```text
 Read AGENTS.md in the project root and incorporate its guidance into your current context.
-Then retrieve only the experience most relevant to this task from
-.agent-policy/current.md, heuristics.md, lessons.md, and playbooks.md before you begin.
+When the project scope becomes relevant, read and consider .agent-policy/current.md.
+Then retrieve only the content most relevant to this task from knowledge.md,
+heuristics.md, lessons.md, and playbooks.md before you begin.
 ```
 
 A shorter prompt also works:
@@ -199,9 +201,9 @@ Users usually do not need to run `add-feedback` or `add-heuristic` manually. An 
 
 ### Two Additional Usage Scenarios
 
-#### 1. Distill Project Experience from Raw Markdown Material
+#### 1. Distill Project Experience from Raw Source Material
 
-When you have chat history, retrospectives, project notes, or other Markdown material, first import it into the project:
+When you have chat history, retrospectives, project notes, or other external source material, first import it into the project:
 
 ```bash
 agent-navi import --target . --applies-to "project history" /path/to/history.md /path/to/notes.md
@@ -212,6 +214,27 @@ agent-navi import --target . --applies-to "project history" /path/to/history.md 
 ```text
 Review the newly imported project material and update the current project's agent-policy.
 ```
+
+##### Real Example: Recover Missing Context from an Exported Task History
+
+When earlier context from a long-running task is no longer available, the agent should not assume that it still has the complete history. The user can export the full task record and preserve it under the target project's `.agent-policy/imports/raw/` in any of these ways:
+
+- create the file directly in the directory;
+- import it from an external location with `agent-navi import`;
+- ask an agent with file-write access to save the supplied attachment.
+
+For example:
+
+```bash
+agent-navi import \
+  --target /path/to/project \
+  --applies-to "task history" \
+  /path/to/task-export.md
+```
+
+The source may be Markdown, PDF, HTML, JSONL, plain text, or another readable format. `import` preserves the file as-is; it does not parse it or automatically promote source content into Policy.
+
+For a large source, the agent should inspect its type, size, and structure first, then retrieve and read relevant ranges incrementally for the current task. If targeted retrieval finds nothing but relevant material may still exist, scanning the complete file incrementally is the final fallback. The agent should retain only verified, genuinely relevant content and route it by meaning into `current.md`, `knowledge.md`, `lessons.md`, `heuristics.md`, `playbooks.md`, or `inbox.md` rather than copying the complete source into Policy files. Cross-project work should still maintain each project scope's local records separately.
 
 #### 2. Run a Full Maintenance Pass in an Agent Tool
 
@@ -264,11 +287,21 @@ Adoption can be observed at three levels:
 2. **Application**: the experience actually changes the retrieval scope, checking order, plan, or output structure.
 3. **Maintenance**: after a stable signal emerges from real work, the agent updates the most relevant experience entry correctly.
 
-Generated agent entry points are ignored by default. If the project uses Git, verify the ignore rules:
+The project experience directory and generated agent entry points are ignored by default. If the project uses Git, verify the ignore rules:
 
 ```bash
-git check-ignore -v AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md
+git check-ignore -v .agent-policy/heuristics.md AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md
 ```
+
+`.gitignore` does not automatically stop tracking files that are already in Git's index. `init` and `ignore add` detect this condition and print a warning. After reviewing the intended index change, keep the local files and untrack them with:
+
+```bash
+git rm -r --cached --ignore-unmatch -- .agent-policy AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md
+git add .gitignore
+git status
+```
+
+Review the result before committing the index change. Previously pushed commits may still contain these files; if they included sensitive information, rotate the affected credentials and assess whether Git history must be cleaned.
 
 The absence of a file change does not necessarily indicate failure. The experience layer should be updated only when the current work produces a clear, stable, and reusable signal.
 
@@ -310,7 +343,8 @@ The point is not merely to avoid repeating an error. It is to preserve a method 
 
 | File | Purpose |
 |---|---|
-| `current.md` | Current project guidance and enabled task layers |
+| `current.md` | Compact project guidance and enabled task layers to read and consider when the project scope becomes relevant |
+| `knowledge.md` | Stable project facts retrieved only when relevant, such as architecture, ownership boundaries, interface relationships, and configuration semantics |
 | `lessons.md` | Reusable experience that preserves context, actions, outcomes, and feedback |
 | `heuristics.md` | Weak guidance that changes future retrieval, planning, action selection, or output structure |
 | `playbooks.md` | Project workflows with an established sequence and checkpoints |
@@ -334,7 +368,33 @@ The optional user and task layers live at:
 | Task | Methods for task types such as code review, research, or document comparison |
 | Project | Constraints, historical decisions, and workflows for the current repository |
 
+`current.md` and `knowledge.md` differ in both timing and content. Read `current.md` when the project scope becomes relevant; its guidance may still be conditional. `knowledge.md` stores descriptive project facts and is not loaded in full by default. Search it only when the current task may need those facts. If targeted search finds nothing but relevant material may still exist, reading the full file is the final fallback, and only genuinely relevant content should enter the working context.
+
 User and task layers are not copied into a project during `init`; they are overlaid with the project layer only during retrieval.
+
+### Introducing `knowledge.md` to an Existing Project
+
+After upgrading Agent Navigator, run `init` again for an existing project:
+
+```bash
+agent-navi init --target /path/to/project
+```
+
+If the project already has `current.md` and this run creates `knowledge.md`, the CLI preserves the existing `current.md` in full and prints a one-time migration suggestion. It does not classify or move content based on file length because that decision requires project semantics.
+
+The concise task printed by the CLI can be given directly to an agent:
+
+```text
+Review .agent-policy/current.md incrementally. Keep compact project guidance
+and enabled task layers in current.md; move stable project facts to knowledge.md,
+ordered workflows to playbooks.md, reusable experience to lessons.md or
+heuristics.md, and uncertain signals to inbox.md. Do not preserve one-off logs
+or temporary task state as long-term Policy. Update destination files first,
+verify the result, then remove migrated content from current.md. Preserve
+identifiers exactly and report anything that remains uncertain.
+```
+
+The notice appears only when `current.md` already exists and `knowledge.md` is created by the current run. New projects do not see it, and subsequent `init` runs do not repeat it. For cross-project work, run `init` and perform the migration separately in each project scope.
 
 Priority is resolved as follows:
 
@@ -351,8 +411,6 @@ The current user instruction can always override historical experience.
 ### Agent-Native Retrieval
 
 Agent Navigator does not implement embeddings, a vector database, or a language-specific semantic classifier. The active agent uses its own semantic understanding and file-retrieval capabilities to select a small number of entries relevant to the task.
-
-The `brief` command provides deterministic direct-match assistance for long tasks, debugging, or handoffs across conversations. It is not a semantic retrieval engine and is not required for everyday use.
 
 ### Agent-Native Maintenance
 
@@ -387,7 +445,6 @@ Most users start with `init` and then let the agent maintain the experience laye
 | `init --global` | Initialize private user and task layers |
 | `ignore add` / `ignore remove` | Add or remove Agent Navigator-managed ignore rules |
 | `setup --task <id>` | Enable an explicit task layer in the project |
-| `brief` | Generate compact temporary guidance for the current task |
 | `sync` | Update generated agent adapter marker blocks |
 | `add-feedback` | Deterministically write a lesson or inbox signal |
 | `add-heuristic` | Deterministically write a project, task, or user heuristic |
@@ -412,14 +469,11 @@ agent-navi init --global
 # Enable a task layer
 agent-navi setup --target . --task code-review
 
-# Generate a temporary brief
-agent-navi brief --target . "review current code changes" --task code-review
-
 # Synchronize entry-point files
 agent-navi sync --target .
 ```
 
-`init --force` regenerates adapters while preserving accumulated project experience stored in Markdown. `init --no-ignore` does not create or modify `.gitignore`. `ignore remove` removes only the specific rules managed by Agent Navigator and preserves broad or custom user ignore rules. By default, `sync` updates only content inside generated marker blocks and preserves other user-authored content in those files.
+`init --force` regenerates adapters while preserving accumulated project experience stored in Markdown. `init --no-ignore` does not create or modify `.gitignore`. The default rules ignore the entire `.agent-policy/` directory and the generated adapters; when `init` or `ignore add` finds related files already tracked by Git, it prints an untracking command but does not modify the Git index automatically. `ignore remove` removes only the specific rules managed by Agent Navigator and preserves other custom ignore rules. By default, `sync` updates only content inside generated marker blocks and preserves other user-authored content in those files.
 
 For full command options, run:
 
@@ -434,12 +488,28 @@ agent-navi <command> --help
 
 - No database, server, MCP service, model API, or resident background process is required.
 - Managed writes reject symbolic links and use per-file locks with same-directory atomic replacement.
-- Temporary `brief.md` and compact drafts should not be committed by default. If `brief.md` is already tracked by Git, the CLI refuses to overwrite it.
+- Compact drafts should not be committed by default.
 - Adapters are agent guidance, not an enforced permission system.
 - Security, permission, testing, and release requirements that need deterministic guarantees should be handled by hooks, CI, sandboxes, or permission systems.
 - Candidate heuristics are excluded from normal retrieval unless the user explicitly requests them or asks for a dedicated review.
 
 Agent-authored policy prose and descriptive metadata use English by default to improve stability across tools and multilingual tasks. File paths, commands, symbols, and API names remain unchanged.
+
+---
+
+## Update Log
+
+### 0.1.0 (2026-07-21) → 0.2.0 (2026-07-30)
+
+- Added configurable Git ignore management: generated agent adapters are ignored by default, with `init --no-ignore`, `ignore add`, and `ignore remove` controls.
+- Improved Windows CI home-directory isolation and expanded usage documentation, research notes, and references.
+
+### 0.2.0 (2026-07-30) → 0.3.0 (2026-08-17)
+
+- Expanded the project layer into independent project scopes: cross-project work follows each project's local guidance and `.agent-policy/`, with guidance explicitly using `--target` to initialize the corresponding project.
+- Added on-demand `knowledge.md`, clarified its boundary with `current.md`, and introduced a one-time content-migration notice for existing projects; agents now retrieve policy directly for the task, and the temporary `brief` mechanism was removed.
+- Improved Git ignore and tracked-file handling: the entire `.agent-policy/` directory and generated adapters are ignored by default, already tracked files are detected with safe untracking guidance, and the CLI never changes the Git index automatically.
+- Standardized agent-authored Policy prose and descriptive metadata in English while preserving identifiers, and documented progressive import and distillation of large thread exports and raw Markdown, PDF, HTML, and JSONL sources.
 
 ---
 

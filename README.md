@@ -117,6 +117,7 @@ agent-navi init --target /path/to/your-project
 ```text
 .agent-policy/
   current.md
+  knowledge.md
   lessons.md
   heuristics.md
   playbooks.md
@@ -161,8 +162,9 @@ CLI 到这里已经完成了最主要的初始化工作。后续不需要为了�
 
 ```text
 请先阅读项目根目录的 AGENTS.md，并将其中的指导纳入你的当前上下文。
-然后根据当前任务，从 .agent-policy/current.md、heuristics.md、lessons.md
-和 playbooks.md 中检索最相关的经验，再开始执行。
+进入项目 scope 时读取并考虑 .agent-policy/current.md；然后根据当前任务，
+从 knowledge.md、heuristics.md、lessons.md 和 playbooks.md 中检索最相关的内容，
+再开始执行。
 ```
 
 更短的提示也可以：
@@ -197,9 +199,9 @@ CLI 到这里已经完成了最主要的初始化工作。后续不需要为了�
 
 ### 两种补充使用场景
 
-#### 1. 从原始 Markdown 资料提炼项目经验
+#### 1. 从原始资料提炼项目经验
 
-如果已有聊天历史、复盘记录、项目说明或其他 Markdown 资料，可以先将它们导入项目：
+如果已有聊天历史、复盘记录、项目说明或其他外部资料，可以先将它们导入项目：
 
 ```bash
 agent-navi import --target . --applies-to "project history" /path/to/history.md /path/to/notes.md
@@ -210,6 +212,27 @@ agent-navi import --target . --applies-to "project history" /path/to/history.md 
 ```text
 请审阅刚导入的项目资料，并结合当前项目更新 agent-policy。
 ```
+
+##### 实际案例：从导出的任务历史补全缺失上下文
+
+当长任务的早期上下文已经不可用时，Agent 不应假设自己仍掌握完整历史。用户可以导出完整任务记录，并通过以下任一方式保存到目标项目的 `.agent-policy/imports/raw/`：
+
+- 直接在目录中创建文件；
+- 使用 `agent-navi import` 从外部导入；
+- 让具有文件写入权限的 Agent 保存用户提供的附件。
+
+例如：
+
+```bash
+agent-navi import \
+  --target /path/to/project \
+  --applies-to "task history" \
+  /path/to/task-export.md
+```
+
+来源可以是 Markdown、PDF、HTML、JSONL、纯文本或其他可读取格式。`import` 只负责原样保留文件，不负责解析，也不会自动将来源内容提升为 Policy。
+
+面对大型来源文件，Agent 应先检查文件类型、大小和结构，再根据当前任务渐进检索和分段读取；定向检索没有结果但相关内容可能存在时，逐段扫描完整文件作为最终 fallback。提炼过程中只保留经过核实且确实相关的内容，并按性质更新 `current.md`、`knowledge.md`、`lessons.md`、`heuristics.md`、`playbooks.md` 或 `inbox.md`，而不是把完整来源复制进 Policy 文件。跨项目任务仍应分别维护每个项目 scope 的本地记录。
 
 #### 2. 在 Agent 工具中执行一次全面维护
 
@@ -262,11 +285,21 @@ agent-navi import --target . --applies-to "project history" /path/to/history.md 
 2. **应用**：经验实际影响了检索范围、检查顺序、计划或输出结构；
 3. **维护**：真实任务形成稳定信号后，Agent 正确更新了最相关的经验条目。
 
-生成的 Agent 入口默认由 Git 忽略；如果项目使用 Git，可以确认忽略规则：
+项目级经验目录和生成的 Agent 入口默认由 Git 忽略；如果项目使用 Git，可以确认忽略规则：
 
 ```bash
-git check-ignore -v AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md
+git check-ignore -v .agent-policy/heuristics.md AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md
 ```
+
+`.gitignore` 不会自动停止追踪已经加入 Git 索引的文件。`init` 和 `ignore add` 会检测这种情况并输出警告。如果收到警告，可在确认索引变更后保留本地文件并解除追踪：
+
+```bash
+git rm -r --cached --ignore-unmatch -- .agent-policy AGENTS.md CLAUDE.md .kiro/steering/agent-policy.md
+git add .gitignore
+git status
+```
+
+检查结果后提交这次索引变更。已经推送的旧提交仍可能包含这些文件；如果其中存在敏感信息，还需要轮换相关凭据并评估是否清理 Git 历史。
 
 没有文件变化并不一定代表失败。只有当本轮形成了清晰、稳定、可复用的新经验时，才应该更新经验层。
 
@@ -308,7 +341,8 @@ Inspect staged, unstaged, and relevant untracked changes early.
 
 | 文件 | 用途 |
 |---|---|
-| `current.md` | 当前项目指导和已启用的任务层 |
+| `current.md` | 进入项目 scope 时需要读取并纳入判断的精简项目指导和已启用任务层 |
+| `knowledge.md` | 仅在相关时检索的稳定项目事实，例如架构、职责边界、接口关系和配置语义 |
 | `lessons.md` | 带背景、行动、结果和反馈的可复用经验 |
 | `heuristics.md` | 改变未来检索、计划、行动或输出的弱引导 |
 | `playbooks.md` | 已形成稳定顺序和检查点的项目工作流 |
@@ -334,6 +368,30 @@ Inspect staged, unstaged, and relevant untracked changes early.
 
 用户层和任务层不会在 `init` 时复制进项目；它们只在检索时与项目层叠加。
 
+`current.md` 与 `knowledge.md` 的区别在于读取时机和内容性质：`current.md` 在项目 scope 变得相关时读取，其中的指导仍可能是有条件的；`knowledge.md` 保存描述性的项目事实，不默认全文加载，只在当前任务可能需要这些事实时检索。定向检索没有找到结果但相关内容仍可能存在时，完整读取对应文件是最终 fallback，进入工作上下文的仍应只有确实相关的内容。
+
+### 为已有项目引入 `knowledge.md`
+
+升级 Agent Navigator 后，对已有项目再次运行 `init`：
+
+```bash
+agent-navi init --target /path/to/project
+```
+
+如果项目已有 `current.md`，但本次才创建 `knowledge.md`，CLI 会完整保留原有 `current.md`，并输出一次迁移建议。它不会根据文件长度自动判断或移动内容，因为这种分类需要理解项目语义。
+
+可以把 CLI 给出的精简任务直接交给 Agent：
+
+```text
+请渐进审阅 .agent-policy/current.md。保留精简的项目指导和已启用任务层；
+将稳定项目事实移入 knowledge.md，有顺序的工作流移入 playbooks.md，
+可复用经验移入 lessons.md 或 heuristics.md，不确定信号移入 inbox.md。
+不要把一次性日志或临时任务状态保存为长期 Policy。先更新并核实目标文件，
+再从 current.md 删除已迁移内容。保持标识符原样，并报告仍不确定的内容。
+```
+
+这条提示只在“已有 `current.md`、本次新建 `knowledge.md`”时出现。新项目初始化不会显示，后续重复运行 `init` 也不会再次提示。跨项目任务应对每个项目 scope 分别运行 `init` 和迁移。
+
 优先级为：
 
 ```text
@@ -349,8 +407,6 @@ Inspect staged, unstaged, and relevant untracked changes early.
 ### Agent 原生检索
 
 Agent Navigator 不实现 embedding、向量数据库或语言专用的语义分类器。当前 Agent 使用自己的语义理解和文件检索能力，从经验层中选择少量与任务相关的条目。
-
-`brief` 命令提供确定性的直接匹配辅助，适合长任务、调试或跨对话交接；它不是语义检索引擎，也不是日常使用的必要步骤。
 
 ### Agent 原生维护
 
@@ -385,7 +441,6 @@ CLI 只提供文件边界、精确替换、同步和轻量检查。是否值得�
 | `init --global` | 初始化私有的用户层和任务层 |
 | `ignore add` / `ignore remove` | 添加或移除 Agent Navigator 管理的忽略规则 |
 | `setup --task <id>` | 在项目中启用一个明确的任务层 |
-| `brief` | 生成当前任务的临时紧凑指导 |
 | `sync` | 更新生成的 Agent adapter marker block |
 | `add-feedback` | 确定性写入 lesson 或 inbox signal |
 | `add-heuristic` | 确定性写入 project / task / user heuristic |
@@ -410,14 +465,11 @@ agent-navi init --global
 # 启用任务层
 agent-navi setup --target . --task code-review
 
-# 生成临时 brief
-agent-navi brief --target . "review current code changes" --task code-review
-
 # 同步入口文件
 agent-navi sync --target .
 ```
 
-`init --force` 会重新生成 adapter，但保留已经积累的项目经验 Markdown。`init --no-ignore` 不会创建或修改 `.gitignore`。`ignore remove` 仅移除 Agent Navigator 管理的具体规则，不会移除用户自己的宽泛或自定义忽略项。`sync` 默认只更新生成标记内的内容，并保留文件中其他用户内容。
+`init --force` 会重新生成 adapter，但保留已经积累的项目经验 Markdown。`init --no-ignore` 不会创建或修改 `.gitignore`。默认规则会忽略整个 `.agent-policy/` 以及生成的 adapter；`init` 和 `ignore add` 发现相关文件已被 Git 追踪时会给出解除追踪命令，但不会自动修改 Git 索引。`ignore remove` 仅移除 Agent Navigator 管理的具体规则，不会移除其他自定义忽略项。`sync` 默认只更新生成标记内的内容，并保留文件中其他用户内容。
 
 完整参数见：
 
@@ -432,12 +484,28 @@ agent-navi <command> --help
 
 - 不需要数据库、服务器、MCP、模型 API 或常驻后台进程；
 - 管理范围内的写入拒绝符号链接，使用逐文件锁和同目录原子替换；
-- 临时 `brief.md` 和 compact 草稿默认不应提交；若 `brief.md` 已被 Git 跟踪，CLI 会拒绝覆盖；
+- Compact 草稿默认不应提交；
 - Adapter 是 Agent 行为指导，不是强制权限系统；
 - 需要确定性保证的安全、权限、测试和发布要求，应交给 hooks、CI、sandbox 或权限系统；
 - Candidate heuristic 默认不会进入正常检索，除非用户明确请求或专门检查。
 
 Agent-authored policy prose 和描述性 metadata 默认使用英文，以提高跨工具和跨语言任务中的稳定性；文件路径、命令、符号和 API 名称保持原样。
+
+---
+
+## 更新日志
+
+### 0.1.0（2026-07-21）→ 0.2.0（2026-07-30）
+
+- 增加可配置的 Git ignore 管理：默认忽略生成的 Agent adapter，并提供 `init --no-ignore`、`ignore add` 和 `ignore remove`。
+- 改进 Windows CI 的用户目录隔离，并补充使用文档、研究说明和参考资料。
+
+### 0.2.0（2026-07-30）→ 0.3.0（2026-08-17）
+
+- 将项目层扩展为相互独立的 project scopes，跨项目任务按各自本地 guidance 和 `.agent-policy/` 工作，并明确使用 `--target` 初始化对应目标项目。
+- 新增按需检索的 `knowledge.md`，明确它与 `current.md` 的边界，为已有项目提供一次性内容迁移提示；检索由 Agent 根据任务直接完成，并移除临时 `brief` 机制。
+- 完善 Git ignore 和已追踪文件处理：默认忽略整个 `.agent-policy/` 与生成的 adapter，检测已被 Git 追踪的文件并给出安全解除追踪提示，但不自动修改 Git 索引。
+- 统一 Agent 写入的 Policy prose 和描述性 metadata 为英文，同时保留标识符原样；补充大型线程导出及 Markdown、PDF、HTML、JSONL 等原始资料的渐进式导入与提炼案例。
 
 ---
 
