@@ -453,6 +453,8 @@ Most users start with `init` and then let the agent maintain the experience laye
 | `compact` | Generate a compact draft without rewriting source files |
 | `check` | Print lightweight task reminders |
 
+`init` initializes or completes the policy files and updates the generated agent adapters; `sync` only refreshes adapters in an initialized project. There is no need to run `sync` after `init`.
+
 Common examples:
 
 ```bash

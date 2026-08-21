@@ -449,6 +449,8 @@ CLI 只提供文件边界、精确替换、同步和轻量检查。是否值得�
 | `compact` | 生成 compact 草稿，不改写源文件 |
 | `check` | 输出轻量任务提醒 |
 
+`init` 会初始化或补全 Policy 文件，并更新生成的 Agent adapter；`sync` 仅刷新已初始化项目的 Agent adapter。运行 `init` 后无需再运行 `sync`。
+
 常用示例：
 
 ```bash
